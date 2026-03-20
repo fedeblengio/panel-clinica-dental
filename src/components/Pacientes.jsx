@@ -127,7 +127,7 @@ export function Pacientes() {
 
       <Dialog open={dialog} onClose={() => setDialog(false)} title={editing ? 'Editar paciente' : 'Nuevo paciente'}>
         <form onSubmit={handleSave} className="space-y-4">
-          {error && <div className="bg-red-500/15 text-red-400 border border-red-500/30 rounded-lg px-4 py-3 text-sm">{error}</div>}
+          {error && <div className="bg-red-50 text-red-700 border border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-500/30 rounded-lg px-4 py-3 text-sm">{error}</div>}
           <div className="grid grid-cols-2 gap-4">
             <Input label="Nombre *" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} required placeholder="Juan Pérez" />
             <Input label="Teléfono *" value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} required placeholder="59891234567" />

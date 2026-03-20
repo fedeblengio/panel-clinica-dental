@@ -153,7 +153,7 @@ export function Citas() {
 
       <Dialog open={dialog} onClose={() => setDialog(false)} title={editing ? 'Editar cita' : 'Nueva cita'} className="max-w-xl">
         <form onSubmit={handleSave} className="space-y-4">
-          {error && <div className="bg-red-500/15 text-red-400 border border-red-500/30 rounded-lg px-4 py-3 text-sm">{error}</div>}
+          {error && <div className="bg-red-50 text-red-700 border border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-500/30 rounded-lg px-4 py-3 text-sm">{error}</div>}
           <div className="grid grid-cols-2 gap-4">
             <Select label="Paciente *" value={form.paciente_telefono} onChange={(e) => setForm({ ...form, paciente_telefono: e.target.value })} required>
               <option value="">Seleccionar...</option>

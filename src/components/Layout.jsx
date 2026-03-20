@@ -1,5 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, CalendarDays, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, CalendarDays, LogOut, Sun, Moon } from 'lucide-react';
+import { useTheme } from '../lib/useTheme';
 
 const links = [
   { to: '/', icon: LayoutDashboard, label: 'Inicio' },
@@ -9,6 +10,7 @@ const links = [
 
 export function Layout({ children, onLogout }) {
   const navigate = useNavigate();
+  const { dark, toggle } = useTheme();
 
   const handleLogout = async () => {
     await fetch('/api/logout', { method: 'POST' });
@@ -44,13 +46,22 @@ export function Layout({ children, onLogout }) {
             ))}
           </nav>
         </div>
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-all duration-200 w-full"
-        >
-          <LogOut size={20} strokeWidth={1.8} />
-          Cerrar sesión
-        </button>
+        <div className="space-y-1">
+          <button
+            onClick={toggle}
+            className="flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-all duration-200 w-full"
+          >
+            {dark ? <Sun size={20} strokeWidth={1.8} /> : <Moon size={20} strokeWidth={1.8} />}
+            {dark ? 'Modo claro' : 'Modo oscuro'}
+          </button>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-all duration-200 w-full"
+          >
+            <LogOut size={20} strokeWidth={1.8} />
+            Cerrar sesión
+          </button>
+        </div>
       </aside>
       <main className="flex-1 overflow-auto">
         <div className="max-w-6xl mx-auto p-8 lg:p-12">

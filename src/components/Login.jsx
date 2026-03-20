@@ -40,7 +40,7 @@ export function Login({ onLogin }) {
         </div>
         <form onSubmit={handleSubmit} className="space-y-5">
           {error && (
-            <div className="bg-red-500/15 text-red-400 border border-red-500/30 rounded-lg px-4 py-3 text-sm">
+            <div className="bg-red-50 text-red-700 border border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-500/30 rounded-lg px-4 py-3 text-sm">
               {error}
             </div>
           )}
