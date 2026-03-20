@@ -75,9 +75,9 @@ export function Citas() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6 sm:mb-8">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Citas</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Citas</h1>
           <p className="text-muted-foreground mt-1">{citas.length} registradas</p>
         </div>
         <Button onClick={openNew}>
@@ -156,7 +156,7 @@ export function Citas() {
       <Dialog open={dialog} onClose={() => setDialog(false)} title={editing ? 'Editar cita' : 'Nueva cita'} className="max-w-xl">
         <form onSubmit={handleSave} className="space-y-4">
           {error && <div className="bg-red-50 text-red-700 border border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-500/30 rounded-lg px-4 py-3 text-sm">{error}</div>}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Select label="Paciente *" value={form.paciente_telefono} onChange={(e) => setForm({ ...form, paciente_telefono: e.target.value })} required>
               <option value="">Seleccionar...</option>
               {pacientes.map((p) => <option key={p.telefono} value={p.telefono}>{p.nombre} ({p.telefono})</option>)}
@@ -166,7 +166,7 @@ export function Citas() {
               {TIPOS.map((t) => <option key={t} value={t}>{t}</option>)}
             </Select>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Input label="Fecha *" type="date" value={form.fecha_cita} onChange={(e) => setForm({ ...form, fecha_cita: e.target.value })} required />
             <Input label="Hora *" type="time" value={form.hora_cita} onChange={(e) => setForm({ ...form, hora_cita: e.target.value })} required />
             <Select label="Estado" value={form.estado} onChange={(e) => setForm({ ...form, estado: e.target.value })}>

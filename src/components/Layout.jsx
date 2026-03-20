@@ -1,5 +1,6 @@
-import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, CalendarDays, LogOut, Sun, Moon } from 'lucide-react';
+import { useState } from 'react';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { LayoutDashboard, Users, CalendarDays, LogOut, Sun, Moon, Menu, X } from 'lucide-react';
 import { useTheme } from '../lib/useTheme';
 
 const links = [
@@ -10,7 +11,9 @@ const links = [
 
 export function Layout({ children, onLogout }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { dark, toggle } = useTheme();
+  const [open, setOpen] = useState(false);
 
   const handleLogout = async () => {
     await fetch('/api/logout', { method: 'POST' });
@@ -18,53 +21,89 @@ export function Layout({ children, onLogout }) {
     navigate('/login');
   };
 
+  const sidebarContent = (
+    <>
+      <div>
+        <div className="px-4 mb-12">
+          <h1 className="text-xl font-bold tracking-tight">Clínica Dental</h1>
+          <p className="text-sm text-muted-foreground mt-1">Panel de gestión</p>
+        </div>
+        <nav className="space-y-1">
+          {links.map(({ to, icon: Icon, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === '/'}
+              onClick={() => setOpen(false)}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-200 ${
+                  isActive
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                }`
+              }
+            >
+              <Icon size={20} strokeWidth={1.8} />
+              {label}
+            </NavLink>
+          ))}
+        </nav>
+      </div>
+      <div className="space-y-1">
+        <button
+          onClick={toggle}
+          className="flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-all duration-200 w-full"
+        >
+          {dark ? <Sun size={20} strokeWidth={1.8} /> : <Moon size={20} strokeWidth={1.8} />}
+          {dark ? 'Modo claro' : 'Modo oscuro'}
+        </button>
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-all duration-200 w-full"
+        >
+          <LogOut size={20} strokeWidth={1.8} />
+          Cerrar sesión
+        </button>
+      </div>
+    </>
+  );
+
+  const currentLabel = links.find(l => l.to === location.pathname)?.label || 'Inicio';
+
   return (
     <div className="flex min-h-screen">
-      <aside className="w-64 border-r bg-card flex flex-col justify-between py-8 px-4 shrink-0">
-        <div>
-          <div className="px-4 mb-12">
-            <h1 className="text-xl font-bold tracking-tight">Clínica Dental</h1>
-            <p className="text-sm text-muted-foreground mt-1">Panel de gestión</p>
-          </div>
-          <nav className="space-y-1">
-            {links.map(({ to, icon: Icon, label }) => (
-              <NavLink
-                key={to}
-                to={to}
-                end={to === '/'}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium transition-all duration-200 ${
-                    isActive
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-                  }`
-                }
-              >
-                <Icon size={20} strokeWidth={1.8} />
-                {label}
-              </NavLink>
-            ))}
-          </nav>
+      {/* Mobile header */}
+      <header className="fixed top-0 left-0 right-0 z-40 flex items-center justify-between h-14 px-4 border-b bg-card md:hidden">
+        <button onClick={() => setOpen(true)} className="p-2 -ml-2 rounded-lg hover:bg-accent transition-colors">
+          <Menu size={22} strokeWidth={1.8} />
+        </button>
+        <span className="font-semibold">{currentLabel}</span>
+        <div className="w-10" />
+      </header>
+
+      {/* Mobile overlay */}
+      {open && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setOpen(false)} />
+          <aside className="fixed inset-y-0 left-0 w-64 bg-card flex flex-col justify-between py-8 px-4 shadow-2xl animate-slide-in z-50">
+            <button
+              onClick={() => setOpen(false)}
+              className="absolute top-4 right-4 p-2 rounded-lg hover:bg-accent transition-colors"
+            >
+              <X size={20} strokeWidth={1.8} />
+            </button>
+            {sidebarContent}
+          </aside>
         </div>
-        <div className="space-y-1">
-          <button
-            onClick={toggle}
-            className="flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-all duration-200 w-full"
-          >
-            {dark ? <Sun size={20} strokeWidth={1.8} /> : <Moon size={20} strokeWidth={1.8} />}
-            {dark ? 'Modo claro' : 'Modo oscuro'}
-          </button>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-all duration-200 w-full"
-          >
-            <LogOut size={20} strokeWidth={1.8} />
-            Cerrar sesión
-          </button>
-        </div>
+      )}
+
+      {/* Desktop sidebar */}
+      <aside className="hidden md:flex w-64 border-r bg-card flex-col justify-between py-8 px-4 shrink-0">
+        {sidebarContent}
       </aside>
-      <main className="flex-1 overflow-auto">
-        <div className="max-w-6xl mx-auto p-8 lg:p-12">
+
+      <main className="flex-1 overflow-auto pt-14 md:pt-0">
+        <div className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-12">
           {children}
         </div>
       </main>

@@ -57,9 +57,9 @@ export function Pacientes() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6 sm:mb-8">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Pacientes</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Pacientes</h1>
           <p className="text-muted-foreground mt-1">{pacientes.length} registrados</p>
         </div>
         <Button onClick={openNew} size="default">
@@ -128,11 +128,11 @@ export function Pacientes() {
       <Dialog open={dialog} onClose={() => setDialog(false)} title={editing ? 'Editar paciente' : 'Nuevo paciente'}>
         <form onSubmit={handleSave} className="space-y-4">
           {error && <div className="bg-red-50 text-red-700 border border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-500/30 rounded-lg px-4 py-3 text-sm">{error}</div>}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input label="Nombre *" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} required placeholder="Juan Pérez" />
             <Input label="Teléfono *" value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} required placeholder="59891234567" />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input label="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="juan@email.com" />
             <Input label="Fecha de nacimiento" value={form.fecha_nacimiento} onChange={(e) => setForm({ ...form, fecha_nacimiento: e.target.value })} placeholder="15/03/1985" />
           </div>

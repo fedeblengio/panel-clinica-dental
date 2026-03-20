@@ -39,18 +39,18 @@ export function Dashboard() {
 
   return (
     <div>
-      <div className="mb-10">
-        <h1 className="text-3xl font-bold tracking-tight">Bienvenido</h1>
+      <div className="mb-6 sm:mb-10">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Bienvenido</h1>
         <p className="text-muted-foreground mt-1">Resumen de tu clínica</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-5 mb-6 sm:mb-10">
         <StatCard icon={Users} value={data.totalPacientes} label="Pacientes registrados" delay="" />
         <StatCard icon={CalendarDays} value={data.citasHoy.length} label="Citas hoy" delay="animate-stagger-1" />
         <StatCard icon={Clock} value={data.proximasCitas.length} label="Próximas citas" delay="animate-stagger-2" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         <Card className="animate-fade-in animate-stagger-2">
           <div className="p-6 pb-4">
             <h2 className="text-lg font-semibold">Citas de hoy</h2>
