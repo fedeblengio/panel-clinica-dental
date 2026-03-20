@@ -13,7 +13,9 @@ const ESTADOS = ['Pendiente', 'Confirmada', 'Cancelada', 'Completada', 'Modifica
 const empty = { paciente_telefono: '', fecha_cita: '', hora_cita: '', tipo_cita: '', estado: 'Pendiente', notas: '' };
 
 function formatDate(d) {
-  return new Date(d).toLocaleDateString('es-PY', { day: '2-digit', month: 'short', year: 'numeric' });
+  if (!d) return '';
+  const [y, m, day] = String(d).split('T')[0].split('-');
+  return new Date(y, m - 1, day).toLocaleDateString('es-PY', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 export function Citas() {
@@ -41,7 +43,7 @@ export function Citas() {
   const openEdit = (c) => {
     setForm({
       ...c,
-      fecha_cita: c.fecha_cita ? new Date(c.fecha_cita).toISOString().split('T')[0] : '',
+      fecha_cita: c.fecha_cita ? String(c.fecha_cita).split('T')[0] : '',
       hora_cita: String(c.hora_cita).substring(0, 5),
     });
     setEditing(c.id);

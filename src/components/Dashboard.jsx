@@ -25,7 +25,9 @@ function formatTime(t) {
 }
 
 function formatDate(d) {
-  return new Date(d).toLocaleDateString('es-PY', { day: '2-digit', month: 'short' });
+  if (!d) return '';
+  const [y, m, day] = String(d).split('T')[0].split('-');
+  return new Date(y, m - 1, day).toLocaleDateString('es-PY', { day: '2-digit', month: 'short' });
 }
 
 export function Dashboard() {
