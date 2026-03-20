@@ -82,6 +82,7 @@ async function initDB() {
         horarios JSONB DEFAULT '{"lunes":{"abre":"08:00","cierra":"18:00","cerrado":false},"martes":{"abre":"08:00","cierra":"18:00","cerrado":false},"miercoles":{"abre":"08:00","cierra":"18:00","cerrado":false},"jueves":{"abre":"08:00","cierra":"18:00","cerrado":false},"viernes":{"abre":"08:00","cierra":"18:00","cerrado":false},"sabado":{"abre":"08:00","cierra":"12:00","cerrado":false},"domingo":{"abre":"","cierra":"","cerrado":true}}',
         servicios JSONB DEFAULT '[]',
         mensaje_bienvenida TEXT DEFAULT '',
+        prompt_sistema TEXT DEFAULT '',
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       )
@@ -91,6 +92,10 @@ async function initDB() {
     if (parseInt(count.rows[0].count) === 0) {
       await pool.query("INSERT INTO configuracion_clinica DEFAULT VALUES");
     }
+    // Add prompt_sistema column if missing (migration for existing DBs)
+    await pool.query(`
+      ALTER TABLE configuracion_clinica ADD COLUMN IF NOT EXISTS prompt_sistema TEXT DEFAULT ''
+    `).catch(() => {});
     console.log('Tabla configuracion_clinica lista');
   } catch (err) {
     console.error('Error creando tabla configuracion_clinica:', err.message);
@@ -359,6 +364,17 @@ app.delete('/api/citas/:id', requireAuth, async (req, res) => {
   }
 });
 
+// --- CONFIGURACION PUBLICA (para n8n) ---
+app.get('/api/configuracion/bot', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT nombre_clinica, direccion, telefono, email, nombre_bot, horarios, servicios, mensaje_bienvenida, prompt_sistema FROM configuracion_clinica LIMIT 1');
+    res.json(result.rows[0] || {});
+  } catch (err) {
+    console.error('Config bot error:', err);
+    res.json({});
+  }
+});
+
 // --- CONFIGURACION ---
 app.get('/api/configuracion', requireAuth, async (req, res) => {
   try {
@@ -372,7 +388,7 @@ app.get('/api/configuracion', requireAuth, async (req, res) => {
 
 app.put('/api/configuracion', requireAuth, async (req, res) => {
   try {
-    const { nombre_clinica, direccion, telefono, email, nombre_bot, horarios, servicios, mensaje_bienvenida } = req.body;
+    const { nombre_clinica, direccion, telefono, email, nombre_bot, horarios, servicios, mensaje_bienvenida, prompt_sistema } = req.body;
     await pool.query(`
       UPDATE configuracion_clinica SET
         nombre_clinica = $1,
@@ -383,6 +399,7 @@ app.put('/api/configuracion', requireAuth, async (req, res) => {
         horarios = $6,
         servicios = $7,
         mensaje_bienvenida = $8,
+        prompt_sistema = $9,
         updated_at = NOW()
       WHERE id = (SELECT id FROM configuracion_clinica LIMIT 1)
     `, [
@@ -393,7 +410,8 @@ app.put('/api/configuracion', requireAuth, async (req, res) => {
       nombre_bot || 'Sofía',
       JSON.stringify(horarios || {}),
       JSON.stringify(servicios || []),
-      mensaje_bienvenida || ''
+      mensaje_bienvenida || '',
+      prompt_sistema || ''
     ]);
     res.json({ ok: true });
   } catch (err) {

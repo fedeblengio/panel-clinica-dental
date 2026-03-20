@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Input, Textarea } from './ui/input';
-import { Save, Plus, Trash2, Building2 } from 'lucide-react';
+import { Save, Plus, Trash2, Building2, Bot } from 'lucide-react';
 import { api } from '../lib/utils';
 
 const DIAS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
@@ -21,6 +21,7 @@ export function Configuracion() {
     horarios: defaultHorarios,
     servicios: [],
     mensaje_bienvenida: '',
+    prompt_sistema: '',
   });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -39,6 +40,7 @@ export function Configuracion() {
           horarios: data.horarios || defaultHorarios,
           servicios: data.servicios || [],
           mensaje_bienvenida: data.mensaje_bienvenida || '',
+          prompt_sistema: data.prompt_sistema || '',
         });
       }
     }).catch(console.error);
@@ -207,6 +209,29 @@ export function Configuracion() {
                 <Plus size={18} /> Agregar
               </Button>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Prompt del Bot */}
+        <Card className="animate-fade-in animate-stagger-3">
+          <div className="p-6 pb-4 flex items-center gap-3">
+            <Bot size={20} className="text-muted-foreground" />
+            <div>
+              <h2 className="text-lg font-semibold">Prompt del Bot (IA)</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">Instrucciones personalizadas para el comportamiento del chatbot. Los datos de la clínica, horarios y servicios se inyectan automáticamente.</p>
+            </div>
+          </div>
+          <CardContent>
+            <Textarea
+              value={form.prompt_sistema}
+              onChange={e => setForm({ ...form, prompt_sistema: e.target.value })}
+              placeholder={"Eres Sofía, la asistente virtual de recepción. Eres cálida, amable y siempre tenés buena onda...\n\nAcá podés escribir las instrucciones de personalidad, reglas de negocio, flujos de trabajo, etc."}
+              rows={12}
+              className="font-mono text-sm"
+            />
+            <p className="text-xs text-muted-foreground mt-2">
+              Variables disponibles que se reemplazan automáticamente: {'{nombre_clinica}'}, {'{direccion}'}, {'{telefono}'}, {'{email}'}, {'{nombre_bot}'}, {'{horarios}'}, {'{servicios}'}
+            </p>
           </CardContent>
         </Card>
 
