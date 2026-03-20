@@ -1,0 +1,13 @@
+  </div>
+  <script>
+    // Confirmación antes de eliminar
+    document.querySelectorAll('.confirm-delete').forEach(form => {
+      form.addEventListener('submit', e => {
+        if (!confirm('¿Estás seguro que querés eliminar esto?')) {
+          e.preventDefault();
+        }
+      });
+    });
+  </script>
+</body>
+</html>

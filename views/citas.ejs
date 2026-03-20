@@ -1,0 +1,72 @@
+<%- include('header', { title: 'Citas', page: 'citas' }) %>
+
+<div class="card">
+  <h2>Citas</h2>
+
+  <div class="toolbar">
+    <form class="search-form" method="GET" action="/citas">
+      <input type="date" name="fecha" value="<%= fecha %>">
+      <select name="estado">
+        <option value="">Todos los estados</option>
+        <option value="Pendiente" <%= estado === 'Pendiente' ? 'selected' : '' %>>Pendiente</option>
+        <option value="Confirmada" <%= estado === 'Confirmada' ? 'selected' : '' %>>Confirmada</option>
+        <option value="Cancelada" <%= estado === 'Cancelada' ? 'selected' : '' %>>Cancelada</option>
+        <option value="Completada" <%= estado === 'Completada' ? 'selected' : '' %>>Completada</option>
+        <option value="Modificada" <%= estado === 'Modificada' ? 'selected' : '' %>>Modificada</option>
+      </select>
+      <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+      <% if (fecha || estado) { %>
+        <a href="/citas" class="btn btn-sm" style="background: var(--border);">Limpiar</a>
+      <% } %>
+    </form>
+    <a href="/citas/nueva" class="btn btn-success">+ Nueva Cita</a>
+  </div>
+
+  <% if (citas.length > 0) { %>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Hora</th>
+            <th>Paciente</th>
+            <th>Tipo</th>
+            <th>Estado</th>
+            <th>Notas</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% citas.forEach(c => { %>
+            <tr>
+              <td><%= new Date(c.fecha_cita).toLocaleDateString('es-PY') %></td>
+              <td><strong><%= String(c.hora_cita).substring(0, 5) %></strong></td>
+              <td><%= c.paciente_nombre %></td>
+              <td><%= c.tipo_cita %></td>
+              <td><span class="badge badge-<%= c.estado.toLowerCase() %>"><%= c.estado %></span></td>
+              <td><%= c.notas ? (c.notas.length > 30 ? c.notas.substring(0, 30) + '...' : c.notas) : '-' %></td>
+              <td>
+                <div class="btn-group">
+                  <a href="/citas/editar/<%= c.id %>" class="btn btn-primary btn-sm">Editar</a>
+                  <form class="confirm-delete" method="POST" action="/citas/eliminar/<%= c.id %>">
+                    <button type="submit" class="btn btn-danger btn-sm">Eliminar</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } else { %>
+    <div class="empty">
+      <% if (fecha || estado) { %>
+        No se encontraron citas con esos filtros
+      <% } else { %>
+        No hay citas registradas todavía
+      <% } %>
+    </div>
+  <% } %>
+</div>
+
+<%- include('footer') %>

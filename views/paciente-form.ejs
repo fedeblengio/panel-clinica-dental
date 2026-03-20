@@ -1,0 +1,44 @@
+<%- include('header', { title: paciente && paciente.id ? 'Editar Paciente' : 'Nuevo Paciente', page: 'pacientes' }) %>
+
+<div class="card">
+  <h2><%= paciente && paciente.id ? 'Editar Paciente' : 'Nuevo Paciente' %></h2>
+
+  <% if (error) { %>
+    <div class="error-msg"><%= error %></div>
+  <% } %>
+
+  <form method="POST" action="<%= paciente && paciente.id ? '/pacientes/editar/' + paciente.id : '/pacientes/nuevo' %>">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Nombre Completo *</label>
+        <input type="text" name="nombre" value="<%= paciente ? paciente.nombre : '' %>" required placeholder="Ej: Juan Pérez">
+      </div>
+      <div class="form-group">
+        <label>Teléfono *</label>
+        <input type="text" name="telefono" value="<%= paciente ? paciente.telefono : '' %>" required placeholder="Ej: 59891234567">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" name="email" value="<%= paciente ? paciente.email : '' %>" placeholder="Ej: juan@email.com">
+      </div>
+      <div class="form-group">
+        <label>Fecha de Nacimiento</label>
+        <input type="text" name="fecha_nacimiento" value="<%= paciente ? paciente.fecha_nacimiento : '' %>" placeholder="Ej: 15/03/1985">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Notas</label>
+      <textarea name="notas" placeholder="Observaciones, alergias, etc."><%= paciente ? paciente.notas : '' %></textarea>
+    </div>
+    <div class="btn-group">
+      <button type="submit" class="btn btn-success">
+        <%= paciente && paciente.id ? 'Guardar Cambios' : 'Crear Paciente' %>
+      </button>
+      <a href="/pacientes" class="btn" style="background: var(--border);">Cancelar</a>
+    </div>
+  </form>
+</div>
+
+<%- include('footer') %>

@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= typeof title !== 'undefined' ? title + ' - ' : '' %>Panel Clínica Dental</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="navbar">
+    <h1>&#x1F9B7; Clínica Dental</h1>
+    <nav>
+      <a href="/" class="<%= typeof page !== 'undefined' && page === 'dashboard' ? 'active' : '' %>">Inicio</a>
+      <a href="/pacientes" class="<%= typeof page !== 'undefined' && page === 'pacientes' ? 'active' : '' %>">Pacientes</a>
+      <a href="/citas" class="<%= typeof page !== 'undefined' && page === 'citas' ? 'active' : '' %>">Citas</a>
+      <a href="/logout" class="logout">Salir</a>
+    </nav>
+  </div>
+  <div class="container">

@@ -1,0 +1,68 @@
+<%- include('header', { title: cita && cita.id ? 'Editar Cita' : 'Nueva Cita', page: 'citas' }) %>
+
+<div class="card">
+  <h2><%= cita && cita.id ? 'Editar Cita' : 'Nueva Cita' %></h2>
+
+  <% if (error) { %>
+    <div class="error-msg"><%= error %></div>
+  <% } %>
+
+  <form method="POST" action="<%= cita && cita.id ? '/citas/editar/' + cita.id : '/citas/nueva' %>">
+    <div class="form-row">
+      <div class="form-group">
+        <label>Paciente *</label>
+        <select name="paciente_telefono" required>
+          <option value="">Seleccionar paciente...</option>
+          <% pacientes.forEach(p => { %>
+            <option value="<%= p.telefono %>" <%= (cita && cita.paciente_telefono === p.telefono) ? 'selected' : '' %>>
+              <%= p.nombre %> (<%= p.telefono %>)
+            </option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Tipo de Cita *</label>
+        <select name="tipo_cita" required>
+          <option value="">Seleccionar tipo...</option>
+          <% const tipos = ['Limpieza dental', 'Consulta general', 'Ortodoncia', 'Endodoncia', 'Extracción', 'Blanqueamiento', 'Implante', 'Corona', 'Revisión', 'Urgencia', 'Otro']; %>
+          <% tipos.forEach(t => { %>
+            <option value="<%= t %>" <%= (cita && cita.tipo_cita === t) ? 'selected' : '' %>><%= t %></option>
+          <% }) %>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Fecha *</label>
+        <input type="date" name="fecha_cita" value="<%= cita && cita.fecha_cita ? new Date(cita.fecha_cita).toISOString().split('T')[0] : '' %>" required>
+      </div>
+      <div class="form-group">
+        <label>Hora *</label>
+        <input type="time" name="hora_cita" value="<%= cita ? String(cita.hora_cita).substring(0, 5) : '' %>" required>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Estado</label>
+        <select name="estado">
+          <% const estados = ['Pendiente', 'Confirmada', 'Cancelada', 'Completada', 'Modificada']; %>
+          <% estados.forEach(e => { %>
+            <option value="<%= e %>" <%= (cita && cita.estado === e) ? 'selected' : '' %>><%= e %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Notas</label>
+        <input type="text" name="notas" value="<%= cita ? (cita.notas || '') : '' %>" placeholder="Notas adicionales">
+      </div>
+    </div>
+    <div class="btn-group">
+      <button type="submit" class="btn btn-success">
+        <%= cita && cita.id ? 'Guardar Cambios' : 'Crear Cita' %>
+      </button>
+      <a href="/citas" class="btn" style="background: var(--border);">Cancelar</a>
+    </div>
+  </form>
+</div>
+
+<%- include('footer') %>

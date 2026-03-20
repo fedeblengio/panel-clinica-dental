@@ -1,0 +1,80 @@
+<%- include('header', { title: 'Inicio', page: 'dashboard' }) %>
+
+<div class="stats">
+  <div class="stat-card">
+    <span class="number"><%= totalPacientes %></span>
+    <span class="label">Pacientes Registrados</span>
+  </div>
+  <div class="stat-card">
+    <span class="number"><%= citasHoy.length %></span>
+    <span class="label">Citas Hoy</span>
+  </div>
+  <div class="stat-card">
+    <span class="number"><%= proximasCitas.length %></span>
+    <span class="label">Próximas Citas</span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Citas de Hoy</h2>
+  <% if (citasHoy.length > 0) { %>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Hora</th>
+            <th>Paciente</th>
+            <th>Tipo</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% citasHoy.forEach(c => { %>
+            <tr>
+              <td><strong><%= String(c.hora_cita).substring(0, 5) %></strong></td>
+              <td><%= c.paciente_nombre %></td>
+              <td><%= c.tipo_cita %></td>
+              <td><span class="badge badge-<%= c.estado.toLowerCase() %>"><%= c.estado %></span></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } else { %>
+    <div class="empty">No hay citas para hoy</div>
+  <% } %>
+</div>
+
+<div class="card">
+  <h2>Próximas Citas</h2>
+  <% if (proximasCitas.length > 0) { %>
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Hora</th>
+            <th>Paciente</th>
+            <th>Tipo</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% proximasCitas.forEach(c => { %>
+            <tr>
+              <td><%= new Date(c.fecha_cita).toLocaleDateString('es-PY') %></td>
+              <td><%= String(c.hora_cita).substring(0, 5) %></td>
+              <td><%= c.paciente_nombre %></td>
+              <td><%= c.tipo_cita %></td>
+              <td><span class="badge badge-<%= c.estado.toLowerCase() %>"><%= c.estado %></span></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } else { %>
+    <div class="empty">No hay citas próximas</div>
+  <% } %>
+</div>
+
+<%- include('footer') %>
