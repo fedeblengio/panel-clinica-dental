@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Input, Select } from './ui/input';
 import { Badge } from './ui/badge';
 import { Dialog } from './ui/dialog';
-import { Plus, Filter, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Filter, Pencil, Trash2, List, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { api } from '../lib/utils';
 
 const TIPOS = ['Limpieza dental', 'Consulta general', 'Ortodoncia', 'Endodoncia', 'Extracción', 'Blanqueamiento', 'Implante', 'Corona', 'Revisión', 'Urgencia', 'Otro'];
@@ -18,6 +18,111 @@ function formatDate(d) {
   return new Date(y, m - 1, day).toLocaleDateString('es-PY', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+function toDateStr(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function addDays(date, n) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + n);
+  return d;
+}
+
+function getWeekStart(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = day === 0 ? 6 : day - 1; // Monday start
+  d.setDate(d.getDate() - diff);
+  return d;
+}
+
+const HOURS = [];
+for (let h = 7; h <= 21; h++) {
+  HOURS.push(`${String(h).padStart(2, '0')}:00`);
+}
+
+const statusColor = {
+  Pendiente: 'bg-amber-100 border-amber-300 text-amber-900 dark:bg-amber-500/20 dark:border-amber-500/40 dark:text-amber-300',
+  Confirmada: 'bg-emerald-100 border-emerald-300 text-emerald-900 dark:bg-emerald-500/20 dark:border-emerald-500/40 dark:text-emerald-300',
+  Cancelada: 'bg-red-100 border-red-300 text-red-900 dark:bg-red-500/20 dark:border-red-500/40 dark:text-red-300',
+  Completada: 'bg-blue-100 border-blue-300 text-blue-900 dark:bg-blue-500/20 dark:border-blue-500/40 dark:text-blue-300',
+  Modificada: 'bg-violet-100 border-violet-300 text-violet-900 dark:bg-violet-500/20 dark:border-violet-500/40 dark:text-violet-300',
+};
+
+const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
+function CalendarView({ citas, onEdit }) {
+  const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
+
+  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const isToday = (d) => toDateStr(d) === toDateStr(new Date());
+
+  const getCitasForDay = (date) => {
+    const ds = toDateStr(date);
+    return citas.filter(c => {
+      const cd = String(c.fecha_cita).split('T')[0];
+      return cd === ds;
+    }).sort((a, b) => (a.hora_cita || '').localeCompare(b.hora_cita || ''));
+  };
+
+  return (
+    <div>
+      {/* Week navigation */}
+      <div className="flex items-center justify-between mb-4">
+        <Button variant="ghost" size="sm" onClick={() => setWeekStart(addDays(weekStart, -7))}>
+          <ChevronLeft size={18} /> Anterior
+        </Button>
+        <div className="text-center">
+          <span className="font-medium">
+            {days[0].toLocaleDateString('es-PY', { day: 'numeric', month: 'short' })} — {days[6].toLocaleDateString('es-PY', { day: 'numeric', month: 'short', year: 'numeric' })}
+          </span>
+        </div>
+        <Button variant="ghost" size="sm" onClick={() => setWeekStart(addDays(weekStart, 7))}>
+          Siguiente <ChevronRight size={18} />
+        </Button>
+      </div>
+      <Button variant="ghost" size="sm" className="mb-4" onClick={() => setWeekStart(getWeekStart(new Date()))}>
+        Ir a hoy
+      </Button>
+
+      {/* Calendar grid */}
+      <div className="grid grid-cols-7 gap-2">
+        {/* Headers */}
+        {days.map((d, i) => (
+          <div key={i} className={`text-center p-2 rounded-lg ${isToday(d) ? 'bg-primary text-primary-foreground' : 'bg-secondary'}`}>
+            <div className="text-sm font-medium">{DIAS_SEMANA[i]}</div>
+            <div className="text-lg font-bold">{d.getDate()}</div>
+          </div>
+        ))}
+        {/* Day columns */}
+        {days.map((d, i) => {
+          const dayCitas = getCitasForDay(d);
+          return (
+            <div key={`col-${i}`} className={`min-h-[200px] border rounded-lg p-1.5 space-y-1 ${isToday(d) ? 'border-primary/50 bg-primary/5' : 'border-border'}`}>
+              {dayCitas.length > 0 ? dayCitas.map(c => (
+                <button
+                  key={c.id}
+                  onClick={() => onEdit(c)}
+                  className={`w-full text-left p-2 rounded-md border text-sm transition-all hover:scale-[1.02] ${statusColor[c.estado] || 'bg-secondary'}`}
+                >
+                  <div className="font-semibold tabular-nums">{String(c.hora_cita).substring(0, 5)}</div>
+                  <div className="font-medium truncate">{c.paciente_nombre}</div>
+                  <div className="text-xs opacity-75 truncate">{c.tipo_cita}</div>
+                </button>
+              )) : (
+                <p className="text-xs text-muted-foreground text-center pt-4">—</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function Citas() {
   const [citas, setCitas] = useState([]);
   const [pacientes, setPacientes] = useState([]);
@@ -28,6 +133,7 @@ export function Citas() {
   const [form, setForm] = useState(empty);
   const [editing, setEditing] = useState(null);
   const [error, setError] = useState('');
+  const [view, setView] = useState('list'); // 'list' | 'calendar'
 
   const load = () => {
     const params = new URLSearchParams();
@@ -80,78 +186,102 @@ export function Citas() {
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Citas</h1>
           <p className="text-muted-foreground mt-1">{citas.length} registradas</p>
         </div>
-        <Button onClick={openNew}>
-          <Plus size={18} /> Nueva cita
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex border rounded-lg overflow-hidden">
+            <button
+              onClick={() => setView('list')}
+              className={`p-2.5 transition-colors ${view === 'list' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-accent'}`}
+            >
+              <List size={18} />
+            </button>
+            <button
+              onClick={() => setView('calendar')}
+              className={`p-2.5 transition-colors ${view === 'calendar' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-accent'}`}
+            >
+              <CalendarDays size={18} />
+            </button>
+          </div>
+          <Button onClick={openNew}>
+            <Plus size={18} /> Nueva cita
+          </Button>
+        </div>
       </div>
 
-      <Card className="animate-fade-in">
-        <div className="p-6 pb-4">
-          <div className="flex items-center gap-3 flex-wrap">
-            <Filter size={18} className="text-muted-foreground" />
-            <input
-              type="date"
-              className="h-12 px-4 rounded-lg border border-input bg-background text-base focus:outline-none focus:ring-2 focus:ring-ring"
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-            />
-            <select
-              className="h-12 px-4 rounded-lg border border-input bg-background text-base focus:outline-none focus:ring-2 focus:ring-ring"
-              value={estado}
-              onChange={(e) => setEstado(e.target.value)}
-            >
-              <option value="">Todos los estados</option>
-              {ESTADOS.map((e) => <option key={e} value={e}>{e}</option>)}
-            </select>
-            {(fecha || estado) && (
-              <Button variant="ghost" size="sm" onClick={() => { setFecha(''); setEstado(''); }}>Limpiar</Button>
-            )}
-          </div>
-        </div>
-        <CardContent>
-          {citas.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-base">
-                <thead>
-                  <tr className="border-b text-left">
-                    <th className="pb-3 font-medium text-muted-foreground">Fecha</th>
-                    <th className="pb-3 font-medium text-muted-foreground">Hora</th>
-                    <th className="pb-3 font-medium text-muted-foreground">Paciente</th>
-                    <th className="pb-3 font-medium text-muted-foreground hidden md:table-cell">Tipo</th>
-                    <th className="pb-3 font-medium text-muted-foreground">Estado</th>
-                    <th className="pb-3 font-medium text-muted-foreground text-right">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {citas.map((c) => (
-                    <tr key={c.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                      <td className="py-4">{formatDate(c.fecha_cita)}</td>
-                      <td className="py-4 font-semibold tabular-nums">{String(c.hora_cita).substring(0, 5)}</td>
-                      <td className="py-4 font-medium">{c.paciente_nombre}</td>
-                      <td className="py-4 text-muted-foreground hidden md:table-cell">{c.tipo_cita}</td>
-                      <td className="py-4"><Badge status={c.estado} /></td>
-                      <td className="py-4 text-right">
-                        <div className="flex gap-1 justify-end">
-                          <Button variant="ghost" size="icon" onClick={() => openEdit(c)}>
-                            <Pencil size={16} />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => setConfirm(c.id)}>
-                            <Trash2 size={16} className="text-destructive" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      {view === 'calendar' ? (
+        <Card className="animate-fade-in">
+          <CardContent className="p-4 sm:p-6">
+            <CalendarView citas={citas} onEdit={openEdit} />
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="animate-fade-in">
+          <div className="p-6 pb-4">
+            <div className="flex items-center gap-3 flex-wrap">
+              <Filter size={18} className="text-muted-foreground" />
+              <input
+                type="date"
+                className="h-12 px-4 rounded-lg border border-input bg-background text-base focus:outline-none focus:ring-2 focus:ring-ring"
+                value={fecha}
+                onChange={(e) => setFecha(e.target.value)}
+              />
+              <select
+                className="h-12 px-4 rounded-lg border border-input bg-background text-base focus:outline-none focus:ring-2 focus:ring-ring"
+                value={estado}
+                onChange={(e) => setEstado(e.target.value)}
+              >
+                <option value="">Todos los estados</option>
+                {ESTADOS.map((e) => <option key={e} value={e}>{e}</option>)}
+              </select>
+              {(fecha || estado) && (
+                <Button variant="ghost" size="sm" onClick={() => { setFecha(''); setEstado(''); }}>Limpiar</Button>
+              )}
             </div>
-          ) : (
-            <p className="text-muted-foreground text-center py-12">
-              {fecha || estado ? 'No se encontraron citas con esos filtros' : 'No hay citas registradas'}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+          </div>
+          <CardContent>
+            {citas.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-base">
+                  <thead>
+                    <tr className="border-b text-left">
+                      <th className="pb-3 font-medium text-muted-foreground">Fecha</th>
+                      <th className="pb-3 font-medium text-muted-foreground">Hora</th>
+                      <th className="pb-3 font-medium text-muted-foreground">Paciente</th>
+                      <th className="pb-3 font-medium text-muted-foreground hidden md:table-cell">Tipo</th>
+                      <th className="pb-3 font-medium text-muted-foreground">Estado</th>
+                      <th className="pb-3 font-medium text-muted-foreground text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {citas.map((c) => (
+                      <tr key={c.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                        <td className="py-4">{formatDate(c.fecha_cita)}</td>
+                        <td className="py-4 font-semibold tabular-nums">{String(c.hora_cita).substring(0, 5)}</td>
+                        <td className="py-4 font-medium">{c.paciente_nombre}</td>
+                        <td className="py-4 text-muted-foreground hidden md:table-cell">{c.tipo_cita}</td>
+                        <td className="py-4"><Badge status={c.estado} /></td>
+                        <td className="py-4 text-right">
+                          <div className="flex gap-1 justify-end">
+                            <Button variant="ghost" size="icon" onClick={() => openEdit(c)}>
+                              <Pencil size={16} />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => setConfirm(c.id)}>
+                              <Trash2 size={16} className="text-destructive" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-center py-12">
+                {fecha || estado ? 'No se encontraron citas con esos filtros' : 'No hay citas registradas'}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Dialog open={dialog} onClose={() => setDialog(false)} title={editing ? 'Editar cita' : 'Nueva cita'} className="max-w-xl">
         <form onSubmit={handleSave} className="space-y-4">

@@ -5,6 +5,8 @@ import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { Pacientes } from './components/Pacientes';
 import { Citas } from './components/Citas';
+import { Conversaciones } from './components/Conversaciones';
+import { Configuracion } from './components/Configuracion';
 
 export default function App() {
   const [auth, setAuth] = useState(null);
@@ -33,6 +35,8 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/pacientes" element={<Pacientes />} />
           <Route path="/citas" element={<Citas />} />
+          <Route path="/conversaciones" element={<Conversaciones />} />
+          <Route path="/configuracion" element={<Configuracion />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </Layout>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 
@@ -7,9 +7,26 @@ export function Login({ onLogin }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [blockedFor, setBlockedFor] = useState(0);
+
+  // Countdown timer when blocked
+  useEffect(() => {
+    if (blockedFor <= 0) return;
+    const timer = setInterval(() => {
+      setBlockedFor(prev => {
+        if (prev <= 1) {
+          setError('');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [blockedFor]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (blockedFor > 0) return;
     setLoading(true);
     setError('');
     try {
@@ -23,6 +40,9 @@ export function Login({ onLogin }) {
         onLogin();
       } else {
         setError(data.error || 'Credenciales incorrectas');
+        if (data.blockedFor) {
+          setBlockedFor(data.blockedFor);
+        }
       }
     } catch {
       setError('Error de conexión');
@@ -30,6 +50,8 @@ export function Login({ onLogin }) {
       setLoading(false);
     }
   };
+
+  const isBlocked = blockedFor > 0;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
@@ -40,8 +62,17 @@ export function Login({ onLogin }) {
         </div>
         <form onSubmit={handleSubmit} className="space-y-5">
           {error && (
-            <div className="bg-red-50 text-red-700 border border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-500/30 rounded-lg px-4 py-3 text-sm">
+            <div className={`border rounded-lg px-4 py-3 text-sm ${
+              isBlocked
+                ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-500/30'
+                : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-500/30'
+            }`}>
               {error}
+              {isBlocked && (
+                <div className="mt-2 font-semibold tabular-nums">
+                  Esperá {blockedFor}s para intentar de nuevo
+                </div>
+              )}
             </div>
           )}
           <Input
@@ -51,6 +82,7 @@ export function Login({ onLogin }) {
             placeholder="Ingresá tu usuario"
             required
             autoFocus
+            disabled={isBlocked}
           />
           <Input
             label="Contraseña"
@@ -59,9 +91,10 @@ export function Login({ onLogin }) {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Ingresá tu contraseña"
             required
+            disabled={isBlocked}
           />
-          <Button type="submit" className="w-full" size="lg" disabled={loading}>
-            {loading ? 'Ingresando...' : 'Iniciar sesión'}
+          <Button type="submit" className="w-full" size="lg" disabled={loading || isBlocked}>
+            {isBlocked ? `Bloqueado (${blockedFor}s)` : loading ? 'Ingresando...' : 'Iniciar sesión'}
           </Button>
         </form>
       </div>

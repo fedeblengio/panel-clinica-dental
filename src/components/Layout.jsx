@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, CalendarDays, LogOut, Sun, Moon, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Users, CalendarDays, MessageSquare, Settings, LogOut, Sun, Moon, Menu, X } from 'lucide-react';
 import { useTheme } from '../lib/useTheme';
 
 const links = [
   { to: '/', icon: LayoutDashboard, label: 'Inicio' },
   { to: '/pacientes', icon: Users, label: 'Pacientes' },
   { to: '/citas', icon: CalendarDays, label: 'Citas' },
+  { to: '/conversaciones', icon: MessageSquare, label: 'Conversaciones' },
+  { to: '/configuracion', icon: Settings, label: 'Configuración' },
 ];
 
 export function Layout({ children, onLogout }) {
