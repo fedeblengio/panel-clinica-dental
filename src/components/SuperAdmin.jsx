@@ -1,14 +1,32 @@
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Dialog } from './ui/dialog';
-import { Plus, Building2, Users, Pencil, Eye } from 'lucide-react';
+import { Plus, Building2, Users, Pencil, Eye, Wifi, WifiOff, QrCode, RefreshCw, Phone } from 'lucide-react';
 import { api, setClinicaId } from '../lib/utils';
 
 const emptyClinica = { nombre: '', slug: '', instance_name: '' };
 const emptyUsuario = { username: '', password: '', nombre: '', rol: 'admin', clinica_id: '' };
+
+const STATUS_MAP = {
+  open: { label: 'Conectado', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300', icon: Wifi },
+  connecting: { label: 'Conectando...', color: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300', icon: RefreshCw },
+  close: { label: 'Desconectado', color: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300', icon: WifiOff },
+  not_found: { label: 'Sin instancia', color: 'bg-gray-100 text-gray-800 dark:bg-gray-500/20 dark:text-gray-300', icon: WifiOff },
+};
+
+function ConnectionBadge({ status }) {
+  const info = STATUS_MAP[status] || STATUS_MAP.not_found;
+  const Icon = info.icon;
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${info.color}`}>
+      <Icon size={12} />
+      {info.label}
+    </span>
+  );
+}
 
 export function SuperAdmin() {
   const [tab, setTab] = useState('clinicas');
@@ -16,16 +34,27 @@ export function SuperAdmin() {
   const [usuarios, setUsuarios] = useState([]);
   const [dialogClinica, setDialogClinica] = useState(false);
   const [dialogUsuario, setDialogUsuario] = useState(false);
+  const [dialogQR, setDialogQR] = useState(false);
+  const [qrData, setQrData] = useState(null);
+  const [qrClinicaName, setQrClinicaName] = useState('');
+  const [qrLoading, setQrLoading] = useState(false);
   const [formClinica, setFormClinica] = useState(emptyClinica);
   const [formUsuario, setFormUsuario] = useState(emptyUsuario);
   const [editingClinica, setEditingClinica] = useState(null);
   const [editingUsuario, setEditingUsuario] = useState(null);
   const [error, setError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
   const loadClinicas = () => api('/admin/clinicas').then(setClinicas).catch(console.error);
   const loadUsuarios = () => api('/admin/usuarios').then(setUsuarios).catch(console.error);
 
   useEffect(() => { loadClinicas(); loadUsuarios(); }, []);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadClinicas();
+    setRefreshing(false);
+  };
 
   const handleSaveClinica = async (e) => {
     e.preventDefault();
@@ -34,7 +63,13 @@ export function SuperAdmin() {
       if (editingClinica) {
         await api(`/admin/clinicas/${editingClinica}`, { method: 'PUT', body: formClinica });
       } else {
-        await api('/admin/clinicas', { method: 'POST', body: formClinica });
+        const result = await api('/admin/clinicas', { method: 'POST', body: formClinica });
+        // If QR code returned, show it
+        if (result.qrcode) {
+          setQrData(result.qrcode);
+          setQrClinicaName(formClinica.nombre);
+          setDialogQR(true);
+        }
       }
       setDialogClinica(false);
       loadClinicas();
@@ -54,6 +89,21 @@ export function SuperAdmin() {
       setDialogUsuario(false);
       loadUsuarios();
     } catch (err) { setError(err.message); }
+  };
+
+  const showQR = async (clinicaId, clinicaNombre) => {
+    setQrLoading(true);
+    setQrClinicaName(clinicaNombre);
+    setDialogQR(true);
+    setQrData(null);
+    try {
+      const result = await api(`/admin/clinicas/${clinicaId}/qrcode`);
+      setQrData(result.base64 || result.qrcode?.base64 || result.code || null);
+    } catch (err) {
+      console.error(err);
+      setQrData(null);
+    }
+    setQrLoading(false);
   };
 
   const switchToClinica = async (clinicaId) => {
@@ -81,7 +131,10 @@ export function SuperAdmin() {
 
       {tab === 'clinicas' && (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-          <div className="flex justify-end mb-4">
+          <div className="flex justify-end gap-2 mb-4">
+            <Button variant="outline" onClick={handleRefresh} disabled={refreshing}>
+              <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} /> Actualizar estados
+            </Button>
             <Button onClick={() => { setFormClinica(emptyClinica); setEditingClinica(null); setError(''); setDialogClinica(true); }}>
               <Plus size={18} /> Nueva clínica
             </Button>
@@ -94,29 +147,43 @@ export function SuperAdmin() {
                     <thead>
                       <tr className="border-b text-left">
                         <th className="pb-3 font-medium text-muted-foreground">Nombre</th>
-                        <th className="pb-3 font-medium text-muted-foreground hidden md:table-cell">Slug</th>
-                        <th className="pb-3 font-medium text-muted-foreground hidden lg:table-cell">Instancia</th>
+                        <th className="pb-3 font-medium text-muted-foreground hidden md:table-cell">Instancia</th>
+                        <th className="pb-3 font-medium text-muted-foreground">WhatsApp</th>
                         <th className="pb-3 font-medium text-muted-foreground">Pacientes</th>
                         <th className="pb-3 font-medium text-muted-foreground">Citas</th>
-                        <th className="pb-3 font-medium text-muted-foreground">Estado</th>
                         <th className="pb-3 font-medium text-muted-foreground text-right">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
                       {clinicas.map((c, i) => (
                         <motion.tr key={c.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.03 }} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                          <td className="py-4 font-medium">{c.nombre}</td>
-                          <td className="py-4 text-muted-foreground hidden md:table-cell">{c.slug}</td>
-                          <td className="py-4 font-mono text-sm hidden lg:table-cell">{c.instance_name}</td>
+                          <td className="py-4">
+                            <div className="font-medium">{c.nombre}</div>
+                            <div className="text-xs text-muted-foreground">{c.slug}</div>
+                          </td>
+                          <td className="py-4 font-mono text-sm hidden md:table-cell">{c.instance_name}</td>
+                          <td className="py-4">
+                            <div className="flex flex-col gap-1">
+                              <ConnectionBadge status={c.connection_status} />
+                              {c.whatsapp_number && (
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Phone size={10} /> +{c.whatsapp_number}
+                                </span>
+                              )}
+                              {c.profile_name && (
+                                <span className="text-xs text-muted-foreground">{c.profile_name}</span>
+                              )}
+                            </div>
+                          </td>
                           <td className="py-4 tabular-nums">{c.total_pacientes}</td>
                           <td className="py-4 tabular-nums">{c.total_citas}</td>
-                          <td className="py-4">
-                            <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${c.activa ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300' : 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300'}`}>
-                              {c.activa ? 'Activa' : 'Inactiva'}
-                            </span>
-                          </td>
                           <td className="py-4 text-right">
                             <div className="flex gap-1 justify-end">
+                              {c.connection_status !== 'open' && (
+                                <Button variant="ghost" size="icon" onClick={() => showQR(c.id, c.nombre)} title="Conectar WhatsApp (QR)">
+                                  <QrCode size={16} />
+                                </Button>
+                              )}
                               <Button variant="ghost" size="icon" onClick={() => switchToClinica(c.id)} title="Ver como esta clínica">
                                 <Eye size={16} />
                               </Button>
@@ -211,6 +278,9 @@ export function SuperAdmin() {
           <Input label="Nombre de la clínica *" value={formClinica.nombre} onChange={e => setFormClinica({ ...formClinica, nombre: e.target.value })} required placeholder="Clínica Dental Sonrisa" />
           <Input label="Slug (identificador único) *" value={formClinica.slug} onChange={e => setFormClinica({ ...formClinica, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })} required placeholder="clinica-sonrisa" />
           <Input label="Nombre de instancia Evolution API *" value={formClinica.instance_name} onChange={e => setFormClinica({ ...formClinica, instance_name: e.target.value })} required placeholder="bot-clinica-sonrisa" />
+          {!editingClinica && (
+            <p className="text-xs text-muted-foreground">Al crear la clínica se crea automáticamente la instancia en Evolution API y te muestra el QR para conectar WhatsApp.</p>
+          )}
           <div className="flex gap-3 pt-2">
             <Button type="submit" className="flex-1">{editingClinica ? 'Guardar cambios' : 'Crear clínica'}</Button>
             <Button type="button" variant="outline" onClick={() => setDialogClinica(false)}>Cancelar</Button>
@@ -248,6 +318,32 @@ export function SuperAdmin() {
             <Button type="button" variant="outline" onClick={() => setDialogUsuario(false)}>Cancelar</Button>
           </div>
         </form>
+      </Dialog>
+
+      {/* Dialog: QR Code */}
+      <Dialog open={dialogQR} onClose={() => setDialogQR(false)} title={`Conectar WhatsApp - ${qrClinicaName}`}>
+        <div className="flex flex-col items-center gap-4">
+          {qrLoading ? (
+            <div className="py-12 text-center">
+              <RefreshCw size={32} className="animate-spin mx-auto text-muted-foreground mb-3" />
+              <p className="text-muted-foreground">Generando QR...</p>
+            </div>
+          ) : qrData ? (
+            <>
+              <p className="text-sm text-muted-foreground text-center">Escaneá este código QR con WhatsApp en el celular de la clínica</p>
+              <div className="bg-white p-4 rounded-xl">
+                <img src={qrData.startsWith('data:') ? qrData : `data:image/png;base64,${qrData}`} alt="QR Code" className="w-64 h-64" />
+              </div>
+              <p className="text-xs text-muted-foreground text-center">El QR expira en unos segundos. Si no funciona, cerrá y volvé a abrir.</p>
+            </>
+          ) : (
+            <div className="py-12 text-center">
+              <p className="text-muted-foreground mb-2">No se pudo generar el QR.</p>
+              <p className="text-xs text-muted-foreground">La instancia puede estar ya conectada o hubo un error. Intentá actualizar los estados.</p>
+            </div>
+          )}
+          <Button variant="outline" onClick={() => setDialogQR(false)} className="w-full">Cerrar</Button>
+        </div>
       </Dialog>
     </div>
   );

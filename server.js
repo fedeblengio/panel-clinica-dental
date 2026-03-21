@@ -7,6 +7,31 @@ const bcrypt = require('bcryptjs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// --- EVOLUTION API CONFIG ---
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://72.61.62.51';
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
+
+async function evolutionFetch(path, options = {}) {
+  const https = require('https');
+  const agent = new https.Agent({ rejectUnauthorized: false });
+  const url = `${EVOLUTION_API_URL}${path}`;
+  try {
+    const res = await fetch(url, {
+      ...options,
+      headers: {
+        'apikey': EVOLUTION_API_KEY,
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+      agent,
+    });
+    return await res.json();
+  } catch (err) {
+    console.error('Evolution API error:', err.message);
+    return null;
+  }
+}
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://humberto:@humberto_proyect_postgres_sql:5432/clinica'
 });
@@ -633,7 +658,20 @@ app.get('/api/admin/clinicas', requireAuth, requireSuperAdmin, async (req, res) 
         (SELECT COUNT(*) FROM usuarios WHERE clinica_id = c.id) as total_usuarios
       FROM clinicas c ORDER BY c.nombre
     `);
-    res.json(result.rows);
+
+    // Fetch real status from Evolution API
+    const instances = await evolutionFetch('/instance/fetchInstances');
+    const clinicas = result.rows.map(c => {
+      const instance = instances?.find(i => i.name === c.instance_name);
+      return {
+        ...c,
+        connection_status: instance?.connectionStatus || 'not_found',
+        whatsapp_number: instance?.ownerJid?.replace('@s.whatsapp.net', '') || null,
+        profile_name: instance?.profileName || null,
+      };
+    });
+
+    res.json(clinicas);
   } catch (err) {
     console.error(err);
     res.json([]);
@@ -643,6 +681,23 @@ app.get('/api/admin/clinicas', requireAuth, requireSuperAdmin, async (req, res) 
 app.post('/api/admin/clinicas', requireAuth, requireSuperAdmin, async (req, res) => {
   try {
     const { nombre, slug, instance_name } = req.body;
+
+    // Create instance in Evolution API
+    const evoResult = await evolutionFetch('/instance/create', {
+      method: 'POST',
+      body: JSON.stringify({
+        instanceName: instance_name,
+        integration: 'WHATSAPP-BAILEYS',
+        qrcode: true,
+      }),
+    });
+
+    if (!evoResult || evoResult.error) {
+      const errorMsg = evoResult?.response?.message?.[0] || evoResult?.error || 'Error al crear instancia en Evolution API';
+      return res.status(400).json({ error: errorMsg });
+    }
+
+    // Save clinic in database
     const result = await pool.query(
       'INSERT INTO clinicas (nombre, slug, instance_name) VALUES ($1, $2, $3) RETURNING *',
       [nombre, slug, instance_name]
@@ -651,7 +706,12 @@ app.post('/api/admin/clinicas', requireAuth, requireSuperAdmin, async (req, res)
       "INSERT INTO configuracion_clinica (nombre_clinica, clinica_id) VALUES ($1, $2)",
       [nombre, result.rows[0].id]
     );
-    res.json(result.rows[0]);
+
+    res.json({
+      ...result.rows[0],
+      qrcode: evoResult.qrcode,
+      connection_status: 'connecting',
+    });
   } catch (err) {
     console.error(err);
     res.status(400).json({ error: 'Error al crear clínica. Verificá que el slug e instancia sean únicos.' });
@@ -669,6 +729,42 @@ app.put('/api/admin/clinicas/:id', requireAuth, requireSuperAdmin, async (req, r
   } catch (err) {
     console.error(err);
     res.status(400).json({ error: 'Error al actualizar clínica.' });
+  }
+});
+
+// Get QR code for connecting WhatsApp
+app.get('/api/admin/clinicas/:id/qrcode', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const clinica = await pool.query('SELECT instance_name FROM clinicas WHERE id = $1', [req.params.id]);
+    if (!clinica.rows[0]) return res.status(404).json({ error: 'Clínica no encontrada' });
+
+    const instanceName = clinica.rows[0].instance_name;
+    const result = await evolutionFetch(`/instance/connect/${instanceName}`);
+    res.json(result || {});
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ error: 'Error al obtener QR' });
+  }
+});
+
+// Get connection status for a specific clinic
+app.get('/api/admin/clinicas/:id/status', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const clinica = await pool.query('SELECT instance_name FROM clinicas WHERE id = $1', [req.params.id]);
+    if (!clinica.rows[0]) return res.status(404).json({ error: 'Clínica no encontrada' });
+
+    const instanceName = clinica.rows[0].instance_name;
+    const instances = await evolutionFetch('/instance/fetchInstances');
+    const instance = instances?.find(i => i.name === instanceName);
+
+    res.json({
+      connection_status: instance?.connectionStatus || 'not_found',
+      whatsapp_number: instance?.ownerJid?.replace('@s.whatsapp.net', '') || null,
+      profile_name: instance?.profileName || null,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ error: 'Error al obtener estado' });
   }
 });
 
