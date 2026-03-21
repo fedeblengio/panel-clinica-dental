@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent } from './ui/card';
 import { HelpCircle, ChevronDown, LayoutDashboard, Users, CalendarDays, MessageSquare, Settings, Bot, Mail } from 'lucide-react';
 
@@ -106,14 +107,25 @@ function FaqItem({ pregunta, respuesta }) {
     >
       <div className="flex items-center justify-between gap-3">
         <span className="font-medium text-base">{pregunta}</span>
-        <ChevronDown
-          size={18}
-          className={`text-muted-foreground shrink-0 transition-transform duration-200 ${abierto ? 'rotate-180' : ''}`}
-        />
+        <motion.div animate={{ rotate: abierto ? 180 : 0 }} transition={{ duration: 0.2 }} className="shrink-0">
+          <ChevronDown
+            size={18}
+            className="text-muted-foreground"
+          />
+        </motion.div>
       </div>
-      {abierto && (
-        <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{respuesta}</p>
-      )}
+      <AnimatePresence>
+        {abierto && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{respuesta}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </button>
   );
 }
@@ -122,7 +134,7 @@ function GuiaSection({ icon: Icon, titulo, items }) {
   const [abierto, setAbierto] = useState(false);
 
   return (
-    <Card className="animate-fade-in">
+    <Card>
       <button
         onClick={() => setAbierto(!abierto)}
         className="w-full p-6 flex items-center justify-between"
@@ -133,28 +145,39 @@ function GuiaSection({ icon: Icon, titulo, items }) {
           </div>
           <h3 className="text-lg font-semibold">{titulo}</h3>
         </div>
-        <ChevronDown
-          size={18}
-          className={`text-muted-foreground transition-transform duration-200 ${abierto ? 'rotate-180' : ''}`}
-        />
+        <motion.div animate={{ rotate: abierto ? 180 : 0 }} transition={{ duration: 0.2 }}>
+          <ChevronDown
+            size={18}
+            className="text-muted-foreground"
+          />
+        </motion.div>
       </button>
-      {abierto && (
-        <CardContent className="pt-0">
-          <div className="space-y-4">
-            {items.map((item, i) => (
-              <div key={i} className="flex gap-3">
-                <div className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
-                  {i + 1}
-                </div>
-                <div>
-                  <p className="font-medium text-sm">{item.titulo}</p>
-                  <p className="text-sm text-muted-foreground mt-0.5 leading-relaxed">{item.desc}</p>
-                </div>
+      <AnimatePresence>
+        {abierto && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <CardContent className="pt-0">
+              <div className="space-y-4">
+                {items.map((item, i) => (
+                  <div key={i} className="flex gap-3">
+                    <div className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                      {i + 1}
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">{item.titulo}</p>
+                      <p className="text-sm text-muted-foreground mt-0.5 leading-relaxed">{item.desc}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </CardContent>
-      )}
+            </CardContent>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </Card>
   );
 }
@@ -162,12 +185,12 @@ function GuiaSection({ icon: Icon, titulo, items }) {
 export function Ayuda() {
   return (
     <div>
-      <div className="flex items-center justify-between mb-6 sm:mb-8">
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between mb-6 sm:mb-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Ayuda</h1>
           <p className="text-muted-foreground mt-1">Guías y preguntas frecuentes</p>
         </div>
-      </div>
+      </motion.div>
 
       {/* Preguntas frecuentes */}
       <div className="mb-8">
@@ -175,13 +198,17 @@ export function Ayuda() {
           <HelpCircle size={20} className="text-muted-foreground" />
           <h2 className="text-lg font-semibold">Preguntas frecuentes</h2>
         </div>
-        <Card className="animate-fade-in">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.4 }}>
+        <Card>
           <CardContent className="divide-y-0">
             {faqs.map((faq, i) => (
-              <FaqItem key={i} {...faq} />
+              <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05, duration: 0.3 }}>
+                <FaqItem {...faq} />
+              </motion.div>
             ))}
           </CardContent>
         </Card>
+        </motion.div>
       </div>
 
       {/* Guías por sección */}
@@ -189,13 +216,15 @@ export function Ayuda() {
         <h2 className="text-lg font-semibold mb-4">Guías por sección</h2>
         <div className="space-y-3">
           {guias.map((guia, i) => (
-            <GuiaSection key={i} {...guia} />
+            <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1, duration: 0.4 }}>
+              <GuiaSection {...guia} />
+            </motion.div>
           ))}
         </div>
       </div>
 
       {/* Contacto soporte */}
-      <Card className="animate-fade-in">
+      <Card>
         <CardContent>
           <div className="flex items-start gap-4 py-2">
             <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">

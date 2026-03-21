@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Input, Textarea } from './ui/input';
@@ -57,7 +58,7 @@ export function Pacientes() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6 sm:mb-8">
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between mb-6 sm:mb-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Pacientes</h1>
           <p className="text-muted-foreground mt-1">{pacientes.length} registrados</p>
@@ -65,9 +66,10 @@ export function Pacientes() {
         <Button onClick={openNew} size="default">
           <Plus size={18} /> Nuevo paciente
         </Button>
-      </div>
+      </motion.div>
 
-      <Card className="animate-fade-in">
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+      <Card>
         <div className="p-6 pb-4">
           <form onSubmit={handleSearch} className="flex gap-3">
             <div className="relative flex-1">
@@ -96,8 +98,8 @@ export function Pacientes() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pacientes.map((p) => (
-                    <tr key={p.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                  {pacientes.map((p, i) => (
+                    <motion.tr key={p.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.03 }} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                       <td className="py-4 font-medium">{p.nombre}</td>
                       <td className="py-4 tabular-nums">{p.telefono}</td>
                       <td className="py-4 text-muted-foreground hidden md:table-cell">{p.email || '—'}</td>
@@ -112,18 +114,19 @@ export function Pacientes() {
                           </Button>
                         </div>
                       </td>
-                    </tr>
+                    </motion.tr>
                   ))}
                 </tbody>
               </table>
             </div>
           ) : (
-            <p className="text-muted-foreground text-center py-12">
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="text-muted-foreground text-center py-12">
               {buscar ? `No se encontraron pacientes con "${buscar}"` : 'No hay pacientes registrados'}
-            </p>
+            </motion.p>
           )}
         </CardContent>
       </Card>
+      </motion.div>
 
       <Dialog open={dialog} onClose={() => setDialog(false)} title={editing ? 'Editar paciente' : 'Nuevo paciente'}>
         <form onSubmit={handleSave} className="space-y-4">

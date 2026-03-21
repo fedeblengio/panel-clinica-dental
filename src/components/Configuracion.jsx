@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Input, Textarea } from './ui/input';
@@ -90,23 +91,24 @@ export function Configuracion() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6 sm:mb-8">
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between mb-6 sm:mb-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Configuración</h1>
           <p className="text-muted-foreground mt-1">Datos de tu clínica</p>
         </div>
-      </div>
+      </motion.div>
 
       <form onSubmit={handleSave} className="space-y-6">
         {error && (
-          <div className="bg-red-50 text-red-700 border border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-500/30 rounded-lg px-4 py-3 text-sm">{error}</div>
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="bg-red-50 text-red-700 border border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-500/30 rounded-lg px-4 py-3 text-sm">{error}</motion.div>
         )}
         {saved && (
-          <div className="bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/30 rounded-lg px-4 py-3 text-sm">Configuración guardada correctamente</div>
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/30 rounded-lg px-4 py-3 text-sm">Configuración guardada correctamente</motion.div>
         )}
 
         {/* Datos generales */}
-        <Card className="animate-fade-in">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.1, duration: 0.4 }}>
+        <Card>
           <div className="p-6 pb-4 flex items-center gap-3">
             <Building2 size={20} className="text-muted-foreground" />
             <h2 className="text-lg font-semibold">Datos generales</h2>
@@ -124,9 +126,11 @@ export function Configuracion() {
             </div>
           </CardContent>
         </Card>
+        </motion.div>
 
         {/* Horarios */}
-        <Card className="animate-fade-in animate-stagger-1">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.1, duration: 0.4 }}>
+        <Card>
           <div className="p-6 pb-4">
             <h2 className="text-lg font-semibold">Horarios de atención</h2>
           </div>
@@ -166,9 +170,11 @@ export function Configuracion() {
             </div>
           </CardContent>
         </Card>
+        </motion.div>
 
         {/* Servicios */}
-        <Card className="animate-fade-in animate-stagger-2">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 2 * 0.1, duration: 0.4 }}>
+        <Card>
           <div className="p-6 pb-4">
             <h2 className="text-lg font-semibold">Servicios y precios</h2>
           </div>
@@ -211,9 +217,11 @@ export function Configuracion() {
             </div>
           </CardContent>
         </Card>
+        </motion.div>
 
         {/* Prompt del Bot */}
-        <Card className="animate-fade-in animate-stagger-3">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 3 * 0.1, duration: 0.4 }}>
+        <Card>
           <div className="p-6 pb-4 flex items-center gap-3">
             <Bot size={20} className="text-muted-foreground" />
             <div>
@@ -234,14 +242,15 @@ export function Configuracion() {
             </p>
           </CardContent>
         </Card>
+        </motion.div>
 
         {/* Save button */}
-        <div className="flex justify-end">
+        <motion.div className="flex justify-end" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
           <Button type="submit" size="lg" disabled={saving}>
             <Save size={18} />
             {saving ? 'Guardando...' : 'Guardar configuración'}
           </Button>
-        </div>
+        </motion.div>
       </form>
     </div>
   );

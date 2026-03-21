@@ -1,13 +1,16 @@
 import { cn } from '../../lib/utils';
+import { motion } from 'framer-motion';
 
 export function Card({ className, children, ...props }) {
   return (
-    <div
+    <motion.div
       className={cn('rounded-xl border bg-card text-card-foreground shadow-sm', className)}
+      whileHover={{ y: -2 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
       {...props}
     >
       {children}
-    </div>
+    </motion.div>
   );
 }
 

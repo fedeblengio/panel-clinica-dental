@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Input, Select } from './ui/input';
@@ -103,15 +104,17 @@ function CalendarView({ citas, onEdit }) {
           return (
             <div key={`col-${i}`} className={`min-h-[200px] border rounded-lg p-1.5 space-y-1 ${isToday(d) ? 'border-primary/50 bg-primary/5' : 'border-border'}`}>
               {dayCitas.length > 0 ? dayCitas.map(c => (
-                <button
+                <motion.button
                   key={c.id}
                   onClick={() => onEdit(c)}
-                  className={`w-full text-left p-2 rounded-md border text-sm transition-all hover:scale-[1.02] ${statusColor[c.estado] || 'bg-secondary'}`}
+                  whileHover={{ scale: 1.05, y: -2 }}
+                  whileTap={{ scale: 0.98 }}
+                  className={`w-full text-left p-2 rounded-md border text-sm transition-all ${statusColor[c.estado] || 'bg-secondary'}`}
                 >
                   <div className="font-semibold tabular-nums">{String(c.hora_cita).substring(0, 5)}</div>
                   <div className="font-medium truncate">{c.paciente_nombre}</div>
                   <div className="text-xs opacity-75 truncate">{c.tipo_cita}</div>
-                </button>
+                </motion.button>
               )) : (
                 <p className="text-xs text-muted-foreground text-center pt-4">—</p>
               )}
@@ -181,13 +184,13 @@ export function Citas() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6 sm:mb-8">
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between mb-6 sm:mb-8">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Citas</h1>
           <p className="text-muted-foreground mt-1">{citas.length} registradas</p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex border rounded-lg overflow-hidden">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="flex border rounded-lg overflow-hidden">
             <button
               onClick={() => setView('list')}
               className={`p-2.5 transition-colors ${view === 'list' ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-accent'}`}
@@ -200,21 +203,24 @@ export function Citas() {
             >
               <CalendarDays size={18} />
             </button>
-          </div>
+          </motion.div>
           <Button onClick={openNew}>
             <Plus size={18} /> Nueva cita
           </Button>
         </div>
-      </div>
+      </motion.div>
 
       {view === 'calendar' ? (
-        <Card className="animate-fade-in">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+        <Card>
           <CardContent className="p-4 sm:p-6">
             <CalendarView citas={citas} onEdit={openEdit} />
           </CardContent>
         </Card>
+        </motion.div>
       ) : (
-        <Card className="animate-fade-in">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+        <Card>
           <div className="p-6 pb-4">
             <div className="flex items-center gap-3 flex-wrap">
               <Filter size={18} className="text-muted-foreground" />
@@ -252,8 +258,8 @@ export function Citas() {
                     </tr>
                   </thead>
                   <tbody>
-                    {citas.map((c) => (
-                      <tr key={c.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                    {citas.map((c, i) => (
+                      <motion.tr key={c.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.03 }} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                         <td className="py-4">{formatDate(c.fecha_cita)}</td>
                         <td className="py-4 font-semibold tabular-nums">{String(c.hora_cita).substring(0, 5)}</td>
                         <td className="py-4 font-medium">{c.paciente_nombre}</td>
@@ -269,7 +275,7 @@ export function Citas() {
                             </Button>
                           </div>
                         </td>
-                      </tr>
+                      </motion.tr>
                     ))}
                   </tbody>
                 </table>
@@ -281,6 +287,7 @@ export function Citas() {
             )}
           </CardContent>
         </Card>
+        </motion.div>
       )}
 
       <Dialog open={dialog} onClose={() => setDialog(false)} title={editing ? 'Editar cita' : 'Nueva cita'} className="max-w-xl">
