@@ -5,9 +5,23 @@ export function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
 
+let currentClinicaId = null;
+
+export function setClinicaId(id) {
+  currentClinicaId = id;
+}
+
+export function getClinicaId() {
+  return currentClinicaId;
+}
+
 export async function api(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (currentClinicaId) {
+    headers['X-Clinica-Id'] = String(currentClinicaId);
+  }
   const res = await fetch(`/api${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     ...options,
     body: options.body ? JSON.stringify(options.body) : undefined,
   });

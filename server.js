@@ -2,6 +2,7 @@ const express = require('express');
 const session = require('express-session');
 const path = require('path');
 const { Pool } = require('pg');
+const bcrypt = require('bcryptjs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,12 +19,9 @@ app.use(session({
   cookie: { maxAge: 8 * 60 * 60 * 1000 }
 }));
 
-const ADMIN_USER = process.env.ADMIN_USER || 'admin';
-const ADMIN_PASS = process.env.ADMIN_PASS || 'clinica123';
-
 // --- RATE LIMITING ---
 const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX || '5', 10);
-const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '120000', 10); // 2 min default
+const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '120000', 10);
 const loginAttempts = new Map();
 
 function getRateLimitInfo(ip) {
@@ -58,7 +56,6 @@ function clearAttempts(ip) {
   loginAttempts.delete(ip);
 }
 
-// Clean up old entries every 10 minutes
 setInterval(() => {
   const now = Date.now();
   for (const [ip, record] of loginAttempts) {
@@ -66,14 +63,69 @@ setInterval(() => {
   }
 }, 10 * 60 * 1000);
 
+// --- MIDDLEWARE ---
 function requireAuth(req, res, next) {
   if (req.session.authenticated) return next();
   res.status(401).json({ error: 'No autorizado' });
 }
 
+function getClinicaId(req) {
+  if (req.session.rol === 'superadmin') {
+    const headerId = req.headers['x-clinica-id'];
+    if (headerId) return parseInt(headerId);
+    return req.session.clinicaActiva || null;
+  }
+  return req.session.clinicaId;
+}
+
+function requireClinica(req, res, next) {
+  const clinicaId = getClinicaId(req);
+  if (!clinicaId) {
+    return res.status(400).json({ error: 'No hay clínica seleccionada' });
+  }
+  req.clinicaId = clinicaId;
+  next();
+}
+
+function requireSuperAdmin(req, res, next) {
+  if (req.session.rol !== 'superadmin') {
+    return res.status(403).json({ error: 'Acceso denegado' });
+  }
+  next();
+}
+
 // --- AUTO-CREATE TABLES ---
 async function initDB() {
   try {
+    // Clinicas table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS clinicas (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(255) NOT NULL,
+        slug VARCHAR(100) UNIQUE NOT NULL,
+        instance_name VARCHAR(100) UNIQUE NOT NULL,
+        activa BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('Tabla clinicas lista');
+
+    // Usuarios table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS usuarios (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(100) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        nombre VARCHAR(255) NOT NULL,
+        rol VARCHAR(20) NOT NULL DEFAULT 'admin',
+        clinica_id INTEGER REFERENCES clinicas(id),
+        activo BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('Tabla usuarios lista');
+
+    // Configuracion clinica (keep existing creation)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS configuracion_clinica (
         id SERIAL PRIMARY KEY,
@@ -90,28 +142,81 @@ async function initDB() {
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
-    // Insert default row if empty
-    const count = await pool.query('SELECT COUNT(*) FROM configuracion_clinica');
-    if (parseInt(count.rows[0].count) === 0) {
-      await pool.query("INSERT INTO configuracion_clinica DEFAULT VALUES");
+
+    // Add clinica_id columns to existing tables
+    await pool.query(`ALTER TABLE configuracion_clinica ADD COLUMN IF NOT EXISTS clinica_id INTEGER REFERENCES clinicas(id)`).catch(() => {});
+    await pool.query(`ALTER TABLE pacientes ADD COLUMN IF NOT EXISTS clinica_id INTEGER REFERENCES clinicas(id)`).catch(() => {});
+    await pool.query(`ALTER TABLE citas ADD COLUMN IF NOT EXISTS clinica_id INTEGER REFERENCES clinicas(id)`).catch(() => {});
+    await pool.query(`ALTER TABLE n8n_chat_histories ADD COLUMN IF NOT EXISTS clinica_id INTEGER REFERENCES clinicas(id)`).catch(() => {});
+    await pool.query(`ALTER TABLE configuracion_clinica ADD COLUMN IF NOT EXISTS prompt_sistema TEXT DEFAULT ''`).catch(() => {});
+    console.log('Columnas clinica_id agregadas');
+
+    // Create default clinic if none exists
+    const clinicCount = await pool.query('SELECT COUNT(*) FROM clinicas');
+    if (parseInt(clinicCount.rows[0].count) === 0) {
+      await pool.query(`
+        INSERT INTO clinicas (nombre, slug, instance_name)
+        VALUES ('Mi Clínica Dental', 'default', 'bot-clinica')
+      `);
+      console.log('Clínica por defecto creada');
     }
-    // Add prompt_sistema column if missing (migration for existing DBs)
-    await pool.query(`
-      ALTER TABLE configuracion_clinica ADD COLUMN IF NOT EXISTS prompt_sistema TEXT DEFAULT ''
-    `).catch(() => {});
-    console.log('Tabla configuracion_clinica lista');
+
+    // Get default clinic id
+    const defaultClinic = await pool.query('SELECT id FROM clinicas ORDER BY id LIMIT 1');
+    const defaultClinicId = defaultClinic.rows[0]?.id;
+
+    if (defaultClinicId) {
+      // Assign existing data to default clinic
+      await pool.query('UPDATE configuracion_clinica SET clinica_id = $1 WHERE clinica_id IS NULL', [defaultClinicId]);
+      await pool.query('UPDATE pacientes SET clinica_id = $1 WHERE clinica_id IS NULL', [defaultClinicId]);
+      await pool.query('UPDATE citas SET clinica_id = $1 WHERE clinica_id IS NULL', [defaultClinicId]);
+      await pool.query('UPDATE n8n_chat_histories SET clinica_id = $1 WHERE clinica_id IS NULL', [defaultClinicId]);
+
+      // Insert default config if empty for this clinic
+      const configCount = await pool.query('SELECT COUNT(*) FROM configuracion_clinica WHERE clinica_id = $1', [defaultClinicId]);
+      if (parseInt(configCount.rows[0].count) === 0) {
+        await pool.query("INSERT INTO configuracion_clinica (clinica_id) VALUES ($1)", [defaultClinicId]);
+      }
+    }
+
+    // Create super admin user if no users exist
+    const userCount = await pool.query('SELECT COUNT(*) FROM usuarios');
+    if (parseInt(userCount.rows[0].count) === 0) {
+      const adminUser = process.env.ADMIN_USER || 'admin';
+      const adminPass = process.env.ADMIN_PASS || 'clinica123';
+      const hash = bcrypt.hashSync(adminPass, 10);
+      await pool.query(
+        `INSERT INTO usuarios (username, password_hash, nombre, rol, clinica_id)
+         VALUES ($1, $2, 'Super Administrador', 'superadmin', NULL)`,
+        [adminUser, hash]
+      );
+      console.log(`Super admin creado: ${adminUser}`);
+    }
+
+    console.log('Base de datos inicializada correctamente');
   } catch (err) {
-    console.error('Error creando tabla configuracion_clinica:', err.message);
+    console.error('Error inicializando DB:', err.message);
   }
 }
 initDB();
 
 // --- AUTH ---
 app.get('/api/session', (req, res) => {
-  res.json({ authenticated: !!req.session.authenticated });
+  if (req.session.authenticated) {
+    return res.json({
+      authenticated: true,
+      userId: req.session.userId,
+      username: req.session.username,
+      nombre: req.session.nombre,
+      rol: req.session.rol,
+      clinicaId: req.session.clinicaId,
+      clinicaActiva: req.session.clinicaActiva,
+    });
+  }
+  res.json({ authenticated: false });
 });
 
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
   const ip = req.ip || req.connection.remoteAddress;
   const blocked = getRateLimitInfo(ip);
   if (blocked) {
@@ -123,24 +228,47 @@ app.post('/api/login', (req, res) => {
   }
 
   const { username, password } = req.body;
-  if (username === ADMIN_USER && password === ADMIN_PASS) {
-    clearAttempts(ip);
-    req.session.authenticated = true;
-    return res.json({ ok: true });
-  }
+  try {
+    const result = await pool.query(
+      'SELECT id, username, password_hash, nombre, rol, clinica_id FROM usuarios WHERE username = $1 AND activo = true',
+      [username]
+    );
+    const user = result.rows[0];
 
-  const record = recordFailedAttempt(ip);
-  const attemptsLeft = RATE_LIMIT_MAX - record.attempts;
-  if (attemptsLeft <= 0) {
-    const remaining = Math.ceil(RATE_LIMIT_WINDOW_MS / 1000);
-    return res.status(429).json({
-      error: `Demasiados intentos. Esperá ${remaining} segundos para intentar de nuevo.`,
-      blockedFor: remaining
+    if (user && bcrypt.compareSync(password, user.password_hash)) {
+      clearAttempts(ip);
+      req.session.authenticated = true;
+      req.session.userId = user.id;
+      req.session.username = user.username;
+      req.session.nombre = user.nombre;
+      req.session.rol = user.rol;
+      req.session.clinicaId = user.clinica_id;
+      // If superadmin, auto-select first clinic
+      if (user.rol === 'superadmin' && !user.clinica_id) {
+        const firstClinic = await pool.query('SELECT id FROM clinicas WHERE activa = true ORDER BY id LIMIT 1');
+        if (firstClinic.rows[0]) {
+          req.session.clinicaActiva = firstClinic.rows[0].id;
+        }
+      }
+      return res.json({ ok: true });
+    }
+
+    const record = recordFailedAttempt(ip);
+    const attemptsLeft = RATE_LIMIT_MAX - record.attempts;
+    if (attemptsLeft <= 0) {
+      const remaining = Math.ceil(RATE_LIMIT_WINDOW_MS / 1000);
+      return res.status(429).json({
+        error: `Demasiados intentos. Esperá ${remaining} segundos para intentar de nuevo.`,
+        blockedFor: remaining
+      });
+    }
+    res.status(401).json({
+      error: `Credenciales incorrectas. Te quedan ${attemptsLeft} intentos.`
     });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Error del servidor' });
   }
-  res.status(401).json({
-    error: `Credenciales incorrectas. Te quedan ${attemptsLeft} intentos.`
-  });
 });
 
 app.post('/api/logout', (req, res) => {
@@ -148,15 +276,27 @@ app.post('/api/logout', (req, res) => {
   res.json({ ok: true });
 });
 
+// --- SUPER ADMIN: SWITCH CLINICA ---
+app.post('/api/admin/switch-clinica', requireAuth, requireSuperAdmin, (req, res) => {
+  const { clinicaId } = req.body;
+  req.session.clinicaActiva = clinicaId;
+  res.json({ ok: true });
+});
+
 // --- DASHBOARD ---
-app.get('/api/dashboard', requireAuth, async (req, res) => {
+app.get('/api/dashboard', requireAuth, requireClinica, async (req, res) => {
   try {
-    const totalPacientes = await pool.query('SELECT COUNT(*) FROM pacientes');
+    const cid = req.clinicaId;
+    const totalPacientes = await pool.query(
+      'SELECT COUNT(*) FROM pacientes WHERE clinica_id = $1', [cid]
+    );
     const citasHoy = await pool.query(
-      "SELECT c.*, p.nombre as paciente FROM citas c JOIN pacientes p ON c.paciente_telefono = p.telefono WHERE c.fecha_cita = CURRENT_DATE ORDER BY c.hora_cita"
+      "SELECT c.*, p.nombre as paciente FROM citas c JOIN pacientes p ON c.paciente_telefono = p.telefono AND p.clinica_id = $1 WHERE c.fecha_cita = CURRENT_DATE AND c.clinica_id = $1 ORDER BY c.hora_cita",
+      [cid]
     );
     const proximasCitas = await pool.query(
-      "SELECT c.*, p.nombre as paciente FROM citas c JOIN pacientes p ON c.paciente_telefono = p.telefono WHERE c.fecha_cita >= CURRENT_DATE AND c.estado != 'Cancelada' ORDER BY c.fecha_cita, c.hora_cita LIMIT 10"
+      "SELECT c.*, p.nombre as paciente FROM citas c JOIN pacientes p ON c.paciente_telefono = p.telefono AND p.clinica_id = $1 WHERE c.fecha_cita >= CURRENT_DATE AND c.estado != 'Cancelada' AND c.clinica_id = $1 ORDER BY c.fecha_cita, c.hora_cita LIMIT 10",
+      [cid]
     );
     res.json({
       totalPacientes: totalPacientes.rows[0].count,
@@ -170,65 +310,45 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
 });
 
 // --- DASHBOARD METRICS ---
-app.get('/api/metricas', requireAuth, async (req, res) => {
+app.get('/api/metricas', requireAuth, requireClinica, async (req, res) => {
   try {
-    // Citas por mes (last 6 months)
+    const cid = req.clinicaId;
     const citasPorMes = await pool.query(`
-      SELECT
-        TO_CHAR(fecha_cita, 'YYYY-MM') as mes,
-        COUNT(*) as total,
+      SELECT TO_CHAR(fecha_cita, 'YYYY-MM') as mes, COUNT(*) as total,
         COUNT(*) FILTER (WHERE estado = 'Completada') as completadas,
         COUNT(*) FILTER (WHERE estado = 'Cancelada') as canceladas,
         COUNT(*) FILTER (WHERE estado = 'Pendiente' AND fecha_cita < CURRENT_DATE) as no_show
-      FROM citas
-      WHERE fecha_cita >= CURRENT_DATE - INTERVAL '6 months'
-      GROUP BY TO_CHAR(fecha_cita, 'YYYY-MM')
-      ORDER BY mes
-    `);
+      FROM citas WHERE fecha_cita >= CURRENT_DATE - INTERVAL '6 months' AND clinica_id = $1
+      GROUP BY TO_CHAR(fecha_cita, 'YYYY-MM') ORDER BY mes
+    `, [cid]);
 
-    // Pacientes nuevos por mes
     const pacientesNuevos = await pool.query(`
-      SELECT
-        TO_CHAR(created_at, 'YYYY-MM') as mes,
-        COUNT(*) as total
-      FROM pacientes
-      WHERE created_at >= CURRENT_DATE - INTERVAL '6 months'
-      GROUP BY TO_CHAR(created_at, 'YYYY-MM')
-      ORDER BY mes
-    `);
+      SELECT TO_CHAR(created_at, 'YYYY-MM') as mes, COUNT(*) as total
+      FROM pacientes WHERE created_at >= CURRENT_DATE - INTERVAL '6 months' AND clinica_id = $1
+      GROUP BY TO_CHAR(created_at, 'YYYY-MM') ORDER BY mes
+    `, [cid]);
 
-    // Resumen general
     const resumen = await pool.query(`
-      SELECT
-        COUNT(*) as total_citas,
+      SELECT COUNT(*) as total_citas,
         COUNT(*) FILTER (WHERE estado = 'Completada') as completadas,
         COUNT(*) FILTER (WHERE estado = 'Cancelada') as canceladas,
         COUNT(*) FILTER (WHERE estado = 'Pendiente' AND fecha_cita < CURRENT_DATE) as no_show
-      FROM citas
-      WHERE fecha_cita >= CURRENT_DATE - INTERVAL '30 days'
-    `);
+      FROM citas WHERE fecha_cita >= CURRENT_DATE - INTERVAL '30 days' AND clinica_id = $1
+    `, [cid]);
 
-    // Recordatorios enviados (last 30 days)
     const recordatorios = await pool.query(`
-      SELECT
-        COUNT(*) FILTER (WHERE recordatorio_24h = true) as enviados_24h,
+      SELECT COUNT(*) FILTER (WHERE recordatorio_24h = true) as enviados_24h,
         COUNT(*) FILTER (WHERE recordatorio_1h = true) as enviados_1h
-      FROM citas
-      WHERE fecha_cita >= CURRENT_DATE - INTERVAL '30 days'
-    `);
+      FROM citas WHERE fecha_cita >= CURRENT_DATE - INTERVAL '30 days' AND clinica_id = $1
+    `, [cid]);
 
-    // Citas esta semana por dia
     const citasSemana = await pool.query(`
-      SELECT
-        TO_CHAR(fecha_cita, 'Dy') as dia,
-        fecha_cita::text as fecha,
-        COUNT(*) as total
-      FROM citas
-      WHERE fecha_cita >= date_trunc('week', CURRENT_DATE)
+      SELECT TO_CHAR(fecha_cita, 'Dy') as dia, fecha_cita::text as fecha, COUNT(*) as total
+      FROM citas WHERE fecha_cita >= date_trunc('week', CURRENT_DATE)
         AND fecha_cita < date_trunc('week', CURRENT_DATE) + INTERVAL '7 days'
-      GROUP BY fecha_cita, TO_CHAR(fecha_cita, 'Dy')
-      ORDER BY fecha_cita
-    `);
+        AND clinica_id = $1
+      GROUP BY fecha_cita, TO_CHAR(fecha_cita, 'Dy') ORDER BY fecha_cita
+    `, [cid]);
 
     res.json({
       citasPorMes: citasPorMes.rows,
@@ -248,14 +368,15 @@ app.get('/api/metricas', requireAuth, async (req, res) => {
 });
 
 // --- PACIENTES ---
-app.get('/api/pacientes', requireAuth, async (req, res) => {
+app.get('/api/pacientes', requireAuth, requireClinica, async (req, res) => {
   try {
+    const cid = req.clinicaId;
     const buscar = req.query.buscar || '';
-    let query = 'SELECT * FROM pacientes';
-    let params = [];
+    let query = 'SELECT * FROM pacientes WHERE clinica_id = $1';
+    let params = [cid];
     if (buscar) {
-      query += ' WHERE nombre ILIKE $1 OR telefono ILIKE $1 OR email ILIKE $1';
-      params = [`%${buscar}%`];
+      query += ' AND (nombre ILIKE $2 OR telefono ILIKE $2 OR email ILIKE $2)';
+      params.push(`%${buscar}%`);
     }
     query += ' ORDER BY nombre';
     const result = await pool.query(query, params);
@@ -266,12 +387,13 @@ app.get('/api/pacientes', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/pacientes', requireAuth, async (req, res) => {
+app.post('/api/pacientes', requireAuth, requireClinica, async (req, res) => {
   try {
+    const cid = req.clinicaId;
     const { telefono, nombre, email, fecha_nacimiento, notas } = req.body;
     const result = await pool.query(
-      'INSERT INTO pacientes (telefono, nombre, email, fecha_nacimiento, notas) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [telefono, nombre, email || '', fecha_nacimiento || '', notas || '']
+      'INSERT INTO pacientes (telefono, nombre, email, fecha_nacimiento, notas, clinica_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [telefono, nombre, email || '', fecha_nacimiento || '', notas || '', cid]
     );
     res.json(result.rows[0]);
   } catch (err) {
@@ -280,12 +402,13 @@ app.post('/api/pacientes', requireAuth, async (req, res) => {
   }
 });
 
-app.put('/api/pacientes/:id', requireAuth, async (req, res) => {
+app.put('/api/pacientes/:id', requireAuth, requireClinica, async (req, res) => {
   try {
+    const cid = req.clinicaId;
     const { telefono, nombre, email, fecha_nacimiento, notas } = req.body;
     await pool.query(
-      'UPDATE pacientes SET telefono=$1, nombre=$2, email=$3, fecha_nacimiento=$4, notas=$5 WHERE id=$6',
-      [telefono, nombre, email || '', fecha_nacimiento || '', notas || '', req.params.id]
+      'UPDATE pacientes SET telefono=$1, nombre=$2, email=$3, fecha_nacimiento=$4, notas=$5 WHERE id=$6 AND clinica_id=$7',
+      [telefono, nombre, email || '', fecha_nacimiento || '', notas || '', req.params.id, cid]
     );
     res.json({ ok: true });
   } catch (err) {
@@ -294,10 +417,14 @@ app.put('/api/pacientes/:id', requireAuth, async (req, res) => {
   }
 });
 
-app.delete('/api/pacientes/:id', requireAuth, async (req, res) => {
+app.delete('/api/pacientes/:id', requireAuth, requireClinica, async (req, res) => {
   try {
-    await pool.query('DELETE FROM citas WHERE paciente_telefono = (SELECT telefono FROM pacientes WHERE id = $1)', [req.params.id]);
-    await pool.query('DELETE FROM pacientes WHERE id = $1', [req.params.id]);
+    const cid = req.clinicaId;
+    await pool.query(
+      'DELETE FROM citas WHERE paciente_telefono = (SELECT telefono FROM pacientes WHERE id = $1 AND clinica_id = $2) AND clinica_id = $2',
+      [req.params.id, cid]
+    );
+    await pool.query('DELETE FROM pacientes WHERE id = $1 AND clinica_id = $2', [req.params.id, cid]);
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
@@ -306,12 +433,13 @@ app.delete('/api/pacientes/:id', requireAuth, async (req, res) => {
 });
 
 // --- CITAS ---
-app.get('/api/citas', requireAuth, async (req, res) => {
+app.get('/api/citas', requireAuth, requireClinica, async (req, res) => {
   try {
+    const cid = req.clinicaId;
     const { fecha, estado, desde, hasta } = req.query;
-    let query = "SELECT c.*, p.nombre as paciente FROM citas c JOIN pacientes p ON c.paciente_telefono = p.telefono WHERE 1=1";
-    let params = [];
-    let i = 1;
+    let query = "SELECT c.*, p.nombre as paciente FROM citas c JOIN pacientes p ON c.paciente_telefono = p.telefono AND p.clinica_id = $1 WHERE c.clinica_id = $1";
+    let params = [cid];
+    let i = 2;
     if (fecha) { query += ` AND c.fecha_cita = $${i++}`; params.push(fecha); }
     if (estado) { query += ` AND c.estado = $${i++}`; params.push(estado); }
     if (desde) { query += ` AND c.fecha_cita >= $${i++}`; params.push(desde); }
@@ -325,14 +453,17 @@ app.get('/api/citas', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/citas', requireAuth, async (req, res) => {
+app.post('/api/citas', requireAuth, requireClinica, async (req, res) => {
   try {
+    const cid = req.clinicaId;
     const { paciente_telefono, fecha_cita, hora_cita, tipo_cita, estado, notas } = req.body;
-    const paciente = await pool.query('SELECT nombre FROM pacientes WHERE telefono = $1', [paciente_telefono]);
+    const paciente = await pool.query(
+      'SELECT nombre FROM pacientes WHERE telefono = $1 AND clinica_id = $2', [paciente_telefono, cid]
+    );
     const paciente_nombre = paciente.rows[0]?.nombre || '';
     const result = await pool.query(
-      'INSERT INTO citas (paciente_telefono, paciente_nombre, fecha_cita, hora_cita, tipo_cita, estado, notas) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-      [paciente_telefono, paciente_nombre, fecha_cita, hora_cita, tipo_cita, estado || 'Pendiente', notas || '']
+      'INSERT INTO citas (paciente_telefono, paciente_nombre, fecha_cita, hora_cita, tipo_cita, estado, notas, clinica_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+      [paciente_telefono, paciente_nombre, fecha_cita, hora_cita, tipo_cita, estado || 'Pendiente', notas || '', cid]
     );
     res.json(result.rows[0]);
   } catch (err) {
@@ -341,14 +472,17 @@ app.post('/api/citas', requireAuth, async (req, res) => {
   }
 });
 
-app.put('/api/citas/:id', requireAuth, async (req, res) => {
+app.put('/api/citas/:id', requireAuth, requireClinica, async (req, res) => {
   try {
+    const cid = req.clinicaId;
     const { paciente_telefono, fecha_cita, hora_cita, tipo_cita, estado, notas } = req.body;
-    const paciente = await pool.query('SELECT nombre FROM pacientes WHERE telefono = $1', [paciente_telefono]);
+    const paciente = await pool.query(
+      'SELECT nombre FROM pacientes WHERE telefono = $1 AND clinica_id = $2', [paciente_telefono, cid]
+    );
     const paciente_nombre = paciente.rows[0]?.nombre || '';
     await pool.query(
-      'UPDATE citas SET paciente_telefono=$1, paciente_nombre=$2, fecha_cita=$3, hora_cita=$4, tipo_cita=$5, estado=$6, notas=$7 WHERE id=$8',
-      [paciente_telefono, paciente_nombre, fecha_cita, hora_cita, tipo_cita, estado, notas || '', req.params.id]
+      'UPDATE citas SET paciente_telefono=$1, paciente_nombre=$2, fecha_cita=$3, hora_cita=$4, tipo_cita=$5, estado=$6, notas=$7 WHERE id=$8 AND clinica_id=$9',
+      [paciente_telefono, paciente_nombre, fecha_cita, hora_cita, tipo_cita, estado, notas || '', req.params.id, cid]
     );
     res.json({ ok: true });
   } catch (err) {
@@ -357,9 +491,10 @@ app.put('/api/citas/:id', requireAuth, async (req, res) => {
   }
 });
 
-app.delete('/api/citas/:id', requireAuth, async (req, res) => {
+app.delete('/api/citas/:id', requireAuth, requireClinica, async (req, res) => {
   try {
-    await pool.query('DELETE FROM citas WHERE id = $1', [req.params.id]);
+    const cid = req.clinicaId;
+    await pool.query('DELETE FROM citas WHERE id = $1 AND clinica_id = $2', [req.params.id, cid]);
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
@@ -367,10 +502,23 @@ app.delete('/api/citas/:id', requireAuth, async (req, res) => {
   }
 });
 
-// --- CONFIGURACION PUBLICA (para n8n) ---
+// --- CONFIGURACION PUBLICA (para n8n bot) ---
 app.get('/api/configuracion/bot', async (req, res) => {
   try {
-    const result = await pool.query('SELECT nombre_clinica, direccion, telefono, email, nombre_bot, horarios, servicios, mensaje_bienvenida, prompt_sistema FROM configuracion_clinica LIMIT 1');
+    const instanceName = req.query.instance || 'bot-clinica';
+    const clinica = await pool.query(
+      'SELECT id FROM clinicas WHERE instance_name = $1', [instanceName]
+    );
+    const clinicaId = clinica.rows[0]?.id;
+    if (!clinicaId) {
+      // Fallback: return first config
+      const result = await pool.query('SELECT nombre_clinica, direccion, telefono, email, nombre_bot, horarios, servicios, mensaje_bienvenida, prompt_sistema FROM configuracion_clinica LIMIT 1');
+      return res.json(result.rows[0] || {});
+    }
+    const result = await pool.query(
+      'SELECT nombre_clinica, direccion, telefono, email, nombre_bot, horarios, servicios, mensaje_bienvenida, prompt_sistema FROM configuracion_clinica WHERE clinica_id = $1 LIMIT 1',
+      [clinicaId]
+    );
     res.json(result.rows[0] || {});
   } catch (err) {
     console.error('Config bot error:', err);
@@ -379,9 +527,11 @@ app.get('/api/configuracion/bot', async (req, res) => {
 });
 
 // --- CONFIGURACION ---
-app.get('/api/configuracion', requireAuth, async (req, res) => {
+app.get('/api/configuracion', requireAuth, requireClinica, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM configuracion_clinica LIMIT 1');
+    const result = await pool.query(
+      'SELECT * FROM configuracion_clinica WHERE clinica_id = $1 LIMIT 1', [req.clinicaId]
+    );
     res.json(result.rows[0] || {});
   } catch (err) {
     console.error('Config error:', err);
@@ -389,33 +539,36 @@ app.get('/api/configuracion', requireAuth, async (req, res) => {
   }
 });
 
-app.put('/api/configuracion', requireAuth, async (req, res) => {
+app.put('/api/configuracion', requireAuth, requireClinica, async (req, res) => {
   try {
+    const cid = req.clinicaId;
     const { nombre_clinica, direccion, telefono, email, nombre_bot, horarios, servicios, mensaje_bienvenida, prompt_sistema } = req.body;
-    await pool.query(`
-      UPDATE configuracion_clinica SET
-        nombre_clinica = $1,
-        direccion = $2,
-        telefono = $3,
-        email = $4,
-        nombre_bot = $5,
-        horarios = $6,
-        servicios = $7,
-        mensaje_bienvenida = $8,
-        prompt_sistema = $9,
-        updated_at = NOW()
-      WHERE id = (SELECT id FROM configuracion_clinica LIMIT 1)
-    `, [
-      nombre_clinica || '',
-      direccion || '',
-      telefono || '',
-      email || '',
-      nombre_bot || 'Sofía',
-      JSON.stringify(horarios || {}),
-      JSON.stringify(servicios || []),
-      mensaje_bienvenida || '',
-      prompt_sistema || ''
-    ]);
+
+    const existing = await pool.query('SELECT id FROM configuracion_clinica WHERE clinica_id = $1', [cid]);
+    if (existing.rows.length > 0) {
+      await pool.query(`
+        UPDATE configuracion_clinica SET
+          nombre_clinica = $1, direccion = $2, telefono = $3, email = $4,
+          nombre_bot = $5, horarios = $6, servicios = $7,
+          mensaje_bienvenida = $8, prompt_sistema = $9, updated_at = NOW()
+        WHERE clinica_id = $10
+      `, [
+        nombre_clinica || '', direccion || '', telefono || '', email || '',
+        nombre_bot || 'Sofía', JSON.stringify(horarios || {}),
+        JSON.stringify(servicios || []), mensaje_bienvenida || '',
+        prompt_sistema || '', cid
+      ]);
+    } else {
+      await pool.query(`
+        INSERT INTO configuracion_clinica (nombre_clinica, direccion, telefono, email, nombre_bot, horarios, servicios, mensaje_bienvenida, prompt_sistema, clinica_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `, [
+        nombre_clinica || '', direccion || '', telefono || '', email || '',
+        nombre_bot || 'Sofía', JSON.stringify(horarios || {}),
+        JSON.stringify(servicios || []), mensaje_bienvenida || '',
+        prompt_sistema || '', cid
+      ]);
+    }
     res.json({ ok: true });
   } catch (err) {
     console.error('Config update error:', err);
@@ -423,10 +576,10 @@ app.put('/api/configuracion', requireAuth, async (req, res) => {
   }
 });
 
-// --- CONVERSACIONES (chat history) ---
-app.get('/api/conversaciones', requireAuth, async (req, res) => {
+// --- CONVERSACIONES ---
+app.get('/api/conversaciones', requireAuth, requireClinica, async (req, res) => {
   try {
-    // Get distinct sessions with last message (columns: id, session_id, message jsonb)
+    const cid = req.clinicaId;
     const result = await pool.query(`
       SELECT
         session_id,
@@ -438,10 +591,12 @@ app.get('/api/conversaciones', requireAuth, async (req, res) => {
          ORDER BY h2.id DESC LIMIT 1
         ) as ultimo_mensaje
       FROM n8n_chat_histories
+      WHERE session_id IN (SELECT telefono FROM pacientes WHERE clinica_id = $1)
+         OR clinica_id = $1
       GROUP BY session_id
       ORDER BY MAX(id) DESC
       LIMIT 50
-    `);
+    `, [cid]);
     res.json(result.rows);
   } catch (err) {
     console.error('Conversaciones error:', err);
@@ -465,6 +620,109 @@ app.get('/api/conversaciones/:sessionId', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Chat detail error:', err);
     res.json([]);
+  }
+});
+
+// --- SUPER ADMIN: CLINICAS ---
+app.get('/api/admin/clinicas', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT c.*,
+        (SELECT COUNT(*) FROM pacientes WHERE clinica_id = c.id) as total_pacientes,
+        (SELECT COUNT(*) FROM citas WHERE clinica_id = c.id) as total_citas,
+        (SELECT COUNT(*) FROM usuarios WHERE clinica_id = c.id) as total_usuarios
+      FROM clinicas c ORDER BY c.nombre
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.json([]);
+  }
+});
+
+app.post('/api/admin/clinicas', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const { nombre, slug, instance_name } = req.body;
+    const result = await pool.query(
+      'INSERT INTO clinicas (nombre, slug, instance_name) VALUES ($1, $2, $3) RETURNING *',
+      [nombre, slug, instance_name]
+    );
+    await pool.query(
+      "INSERT INTO configuracion_clinica (nombre_clinica, clinica_id) VALUES ($1, $2)",
+      [nombre, result.rows[0].id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ error: 'Error al crear clínica. Verificá que el slug e instancia sean únicos.' });
+  }
+});
+
+app.put('/api/admin/clinicas/:id', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const { nombre, slug, instance_name, activa } = req.body;
+    await pool.query(
+      'UPDATE clinicas SET nombre=$1, slug=$2, instance_name=$3, activa=$4 WHERE id=$5',
+      [nombre, slug, instance_name, activa !== false, req.params.id]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ error: 'Error al actualizar clínica.' });
+  }
+});
+
+// --- SUPER ADMIN: USUARIOS ---
+app.get('/api/admin/usuarios', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT u.id, u.username, u.nombre, u.rol, u.clinica_id, u.activo, u.created_at,
+        c.nombre as clinica_nombre
+      FROM usuarios u
+      LEFT JOIN clinicas c ON u.clinica_id = c.id
+      ORDER BY u.nombre
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.json([]);
+  }
+});
+
+app.post('/api/admin/usuarios', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const { username, password, nombre, rol, clinica_id } = req.body;
+    const hash = bcrypt.hashSync(password, 10);
+    const result = await pool.query(
+      'INSERT INTO usuarios (username, password_hash, nombre, rol, clinica_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, nombre, rol, clinica_id',
+      [username, hash, nombre, rol || 'admin', clinica_id || null]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ error: 'Error al crear usuario. Verificá que el username no esté duplicado.' });
+  }
+});
+
+app.put('/api/admin/usuarios/:id', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const { username, password, nombre, rol, clinica_id, activo } = req.body;
+    if (password) {
+      const hash = bcrypt.hashSync(password, 10);
+      await pool.query(
+        'UPDATE usuarios SET username=$1, password_hash=$2, nombre=$3, rol=$4, clinica_id=$5, activo=$6 WHERE id=$7',
+        [username, hash, nombre, rol, clinica_id || null, activo !== false, req.params.id]
+      );
+    } else {
+      await pool.query(
+        'UPDATE usuarios SET username=$1, nombre=$2, rol=$3, clinica_id=$4, activo=$5 WHERE id=$6',
+        [username, nombre, rol, clinica_id || null, activo !== false, req.params.id]
+      );
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ error: 'Error al actualizar usuario.' });
   }
 });
 

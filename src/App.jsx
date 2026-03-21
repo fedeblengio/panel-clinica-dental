@@ -8,14 +8,24 @@ import { Citas } from './components/Citas';
 import { Conversaciones } from './components/Conversaciones';
 import { Configuracion } from './components/Configuracion';
 import { Ayuda } from './components/Ayuda';
+import { SuperAdmin } from './components/SuperAdmin';
+import { setClinicaId } from './lib/utils';
 
 export default function App() {
   const [auth, setAuth] = useState(null);
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
     fetch('/api/session')
       .then((r) => r.json())
-      .then((d) => setAuth(d.authenticated))
+      .then((d) => {
+        setAuth(d.authenticated);
+        if (d.authenticated) {
+          setUser(d);
+          if (d.clinicaId) setClinicaId(d.clinicaId);
+          else if (d.clinicaActiva) setClinicaId(d.clinicaActiva);
+        }
+      })
       .catch(() => setAuth(false));
   }, []);
 
@@ -24,14 +34,19 @@ export default function App() {
   if (!auth) {
     return (
       <BrowserRouter>
-        <Login onLogin={() => setAuth(true)} />
+        <Login onLogin={(userData) => {
+          setAuth(true);
+          setUser(userData);
+          if (userData.clinicaId) setClinicaId(userData.clinicaId);
+          else if (userData.clinicaActiva) setClinicaId(userData.clinicaActiva);
+        }} />
       </BrowserRouter>
     );
   }
 
   return (
     <BrowserRouter>
-      <Layout onLogout={() => setAuth(false)}>
+      <Layout onLogout={() => { setAuth(false); setUser(null); setClinicaId(null); }} user={user}>
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/pacientes" element={<Pacientes />} />
@@ -39,6 +54,9 @@ export default function App() {
           <Route path="/conversaciones" element={<Conversaciones />} />
           <Route path="/configuracion" element={<Configuracion />} />
           <Route path="/ayuda" element={<Ayuda />} />
+          {user?.rol === 'superadmin' && (
+            <Route path="/admin" element={<SuperAdmin />} />
+          )}
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </Layout>

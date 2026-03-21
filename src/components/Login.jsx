@@ -38,7 +38,9 @@ export function Login({ onLogin }) {
       });
       const data = await res.json();
       if (data.ok) {
-        onLogin();
+        const sessionRes = await fetch('/api/session');
+        const sessionData = await sessionRes.json();
+        onLogin(sessionData);
       } else {
         setError(data.error || 'Credenciales incorrectas');
         if (data.blockedFor) {

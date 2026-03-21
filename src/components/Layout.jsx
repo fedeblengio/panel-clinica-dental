@@ -1,26 +1,27 @@
 import { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Users, CalendarDays, MessageSquare, Settings, HelpCircle, LogOut, Sun, Moon, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Users, CalendarDays, MessageSquare, Settings, HelpCircle, LogOut, Sun, Moon, Menu, X, Shield } from 'lucide-react';
 import { useTheme } from '../lib/useTheme';
-
-const links = [
-  { to: '/', icon: LayoutDashboard, label: 'Inicio' },
-  { to: '/pacientes', icon: Users, label: 'Pacientes' },
-  { to: '/citas', icon: CalendarDays, label: 'Citas' },
-  { to: '/conversaciones', icon: MessageSquare, label: 'Conversaciones' },
-  { to: '/configuracion', icon: Settings, label: 'Configuración' },
-  { to: '/ayuda', icon: HelpCircle, label: 'Ayuda' },
-];
 
 const sidebarSpring = { type: 'spring', stiffness: 300, damping: 30 };
 
-export function Layout({ children, onLogout }) {
+export function Layout({ children, onLogout, user }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { dark, toggle } = useTheme();
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
+
+  const links = [
+    { to: '/', icon: LayoutDashboard, label: 'Inicio' },
+    { to: '/pacientes', icon: Users, label: 'Pacientes' },
+    { to: '/citas', icon: CalendarDays, label: 'Citas' },
+    { to: '/conversaciones', icon: MessageSquare, label: 'Conversaciones' },
+    { to: '/configuracion', icon: Settings, label: 'Configuración' },
+    { to: '/ayuda', icon: HelpCircle, label: 'Ayuda' },
+    ...(user?.rol === 'superadmin' ? [{ to: '/admin', icon: Shield, label: 'Super Admin' }] : []),
+  ];
 
   const handleLogout = async () => {
     await fetch('/api/logout', { method: 'POST' });
@@ -28,12 +29,21 @@ export function Layout({ children, onLogout }) {
     navigate('/login');
   };
 
+  const panelTitle = user?.rol === 'superadmin' ? 'Panel Admin' : 'Clínica Dental';
+
   const mobileContent = (
     <>
       <div>
-        <div className="px-4 mb-12">
-          <h1 className="text-xl font-bold tracking-tight">Clínica Dental</h1>
-          <p className="text-sm text-muted-foreground mt-1">Panel de gestión</p>
+        <div className="px-4 mb-8">
+          <h1 className="text-xl font-bold tracking-tight">{panelTitle}</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {user?.nombre || 'Panel de gestión'}
+          </p>
+          {user?.rol === 'superadmin' && (
+            <span className="inline-flex items-center rounded-full bg-violet-100 text-violet-800 dark:bg-violet-500/20 dark:text-violet-300 px-2.5 py-0.5 text-xs font-medium mt-2">
+              Super Admin
+            </span>
+          )}
         </div>
         <nav className="space-y-1">
           {links.map(({ to, icon: Icon, label }) => (
@@ -133,13 +143,16 @@ export function Layout({ children, onLogout }) {
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
               <LayoutDashboard size={18} className="text-primary" />
             </div>
-            <motion.span
-              className="ml-3 text-lg font-bold tracking-tight whitespace-nowrap"
+            <motion.div
+              className="ml-3 whitespace-nowrap overflow-hidden"
               animate={{ opacity: expanded ? 1 : 0 }}
               transition={{ duration: 0.2 }}
             >
-              Clínica Dental
-            </motion.span>
+              <span className="text-lg font-bold tracking-tight block">{panelTitle}</span>
+              {user?.nombre && (
+                <span className="text-xs text-muted-foreground block">{user.nombre}</span>
+              )}
+            </motion.div>
           </div>
 
           <nav className="space-y-1 px-2">
