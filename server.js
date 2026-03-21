@@ -176,7 +176,30 @@ async function initDB() {
     await pool.query(`ALTER TABLE citas ADD COLUMN IF NOT EXISTS clinica_id INTEGER REFERENCES clinicas(id)`).catch(() => {});
     await pool.query(`ALTER TABLE n8n_chat_histories ADD COLUMN IF NOT EXISTS clinica_id INTEGER REFERENCES clinicas(id)`).catch(() => {});
     await pool.query(`ALTER TABLE configuracion_clinica ADD COLUMN IF NOT EXISTS prompt_sistema TEXT DEFAULT ''`).catch(() => {});
-    console.log('Columnas clinica_id agregadas');
+
+    // DB trigger: auto-assign clinica_id to new chat messages based on patient's clinica
+    await pool.query(`
+      CREATE OR REPLACE FUNCTION auto_set_chat_clinica()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        IF NEW.clinica_id IS NULL THEN
+          SELECT p.clinica_id INTO NEW.clinica_id
+          FROM pacientes p
+          WHERE p.telefono = NEW.session_id
+          LIMIT 1;
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+    `).catch(() => {});
+    await pool.query(`
+      DROP TRIGGER IF EXISTS trg_chat_clinica ON n8n_chat_histories;
+      CREATE TRIGGER trg_chat_clinica
+        BEFORE INSERT ON n8n_chat_histories
+        FOR EACH ROW
+        EXECUTE FUNCTION auto_set_chat_clinica();
+    `).catch(() => {});
+    console.log('Columnas clinica_id y trigger agregados');
 
     // Create default clinic if none exists
     const clinicCount = await pool.query('SELECT COUNT(*) FROM clinicas');
@@ -532,24 +555,79 @@ app.delete('/api/citas/:id', requireAuth, requireClinica, async (req, res) => {
 // --- CONFIGURACION PUBLICA (para n8n bot) ---
 app.get('/api/configuracion/bot', async (req, res) => {
   try {
-    const instanceName = req.query.instance || 'bot-clinica';
+    const instanceName = req.query.instance;
+    if (!instanceName) {
+      return res.status(400).json({ error: 'instance parameter required' });
+    }
     const clinica = await pool.query(
-      'SELECT id FROM clinicas WHERE instance_name = $1', [instanceName]
+      'SELECT id, nombre, instance_name FROM clinicas WHERE instance_name = $1', [instanceName]
     );
     const clinicaId = clinica.rows[0]?.id;
     if (!clinicaId) {
-      // Fallback: return first config
-      const result = await pool.query('SELECT nombre_clinica, direccion, telefono, email, nombre_bot, horarios, servicios, mensaje_bienvenida, prompt_sistema FROM configuracion_clinica LIMIT 1');
-      return res.json(result.rows[0] || {});
+      return res.status(404).json({ error: 'Clinica no encontrada para esa instancia' });
     }
     const result = await pool.query(
       'SELECT nombre_clinica, direccion, telefono, email, nombre_bot, horarios, servicios, mensaje_bienvenida, prompt_sistema FROM configuracion_clinica WHERE clinica_id = $1 LIMIT 1',
       [clinicaId]
     );
-    res.json(result.rows[0] || {});
+    res.json({
+      ...result.rows[0] || {},
+      clinica_id: clinicaId,
+      instance_name: instanceName,
+    });
   } catch (err) {
     console.error('Config bot error:', err);
     res.json({});
+  }
+});
+
+// --- n8n: registrar sesion de chat con clinica ---
+app.post('/api/bot/register-session', async (req, res) => {
+  try {
+    const { instance, session_id } = req.body;
+    if (!instance || !session_id) {
+      return res.status(400).json({ error: 'instance y session_id requeridos' });
+    }
+    const clinica = await pool.query(
+      'SELECT id FROM clinicas WHERE instance_name = $1', [instance]
+    );
+    const clinicaId = clinica.rows[0]?.id;
+    if (!clinicaId) {
+      return res.status(404).json({ error: 'Clínica no encontrada para esa instancia' });
+    }
+    // Update chat histories for this session to belong to this clinica
+    await pool.query(
+      'UPDATE n8n_chat_histories SET clinica_id = $1 WHERE session_id = $2 AND clinica_id IS NULL',
+      [clinicaId, session_id]
+    );
+    // Also ensure patient belongs to this clinica if exists
+    await pool.query(
+      'UPDATE pacientes SET clinica_id = $1 WHERE telefono = $2 AND clinica_id IS NULL',
+      [clinicaId, session_id]
+    );
+    res.json({ ok: true, clinica_id: clinicaId });
+  } catch (err) {
+    console.error('Register session error:', err);
+    res.status(500).json({ error: 'Error interno' });
+  }
+});
+
+// --- n8n: asignar clinica_id a chat histories periodicamente ---
+app.post('/api/bot/sync-chat-clinicas', async (req, res) => {
+  try {
+    // Assign clinica_id to chat histories based on matching patient phone numbers
+    const updated = await pool.query(`
+      UPDATE n8n_chat_histories h
+      SET clinica_id = p.clinica_id
+      FROM pacientes p
+      WHERE h.session_id = p.telefono
+        AND h.clinica_id IS NULL
+        AND p.clinica_id IS NOT NULL
+    `);
+    res.json({ ok: true, updated: updated.rowCount });
+  } catch (err) {
+    console.error('Sync chat clinicas error:', err);
+    res.status(500).json({ error: 'Error interno' });
   }
 });
 
@@ -631,17 +709,18 @@ app.get('/api/conversaciones', requireAuth, requireClinica, async (req, res) => 
   }
 });
 
-app.get('/api/conversaciones/:sessionId', requireAuth, async (req, res) => {
+app.get('/api/conversaciones/:sessionId', requireAuth, requireClinica, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT id, session_id, message->>'type' as role, message->>'content' as message
        FROM n8n_chat_histories
        WHERE session_id = $1
+         AND (clinica_id = $2 OR clinica_id IS NULL)
          AND message->>'type' IN ('human', 'ai')
          AND message->>'content' IS NOT NULL
          AND message->>'content' NOT LIKE 'Calling %'
        ORDER BY id ASC`,
-      [req.params.sessionId]
+      [req.params.sessionId, req.clinicaId]
     );
     res.json(result.rows);
   } catch (err) {
@@ -699,6 +778,39 @@ app.post('/api/admin/clinicas', requireAuth, requireSuperAdmin, async (req, res)
       return res.status(400).json({ error: errorMsg });
     }
 
+    // Configure webhook pointing to n8n
+    const webhookUrl = process.env.N8N_WEBHOOK_URL || 'https://humberto-proyect-n8n.jxugns.easypanel.host/webhook/clinica-dental-whatsapp-v4';
+    const webhookResult = await evolutionFetch(`/webhook/set/${instance_name}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        url: webhookUrl,
+        enabled: true,
+        events: ['MESSAGES_UPSERT'],
+        webhookByEvents: false,
+        webhookBase64: false
+      })
+    });
+    const webhookConfigured = webhookResult !== null && !webhookResult.error;
+    if (!webhookConfigured) {
+      console.error('Warning: webhook config failed for', instance_name);
+    }
+
+    // Configure instance settings
+    const settingsResult = await evolutionFetch(`/settings/set/${instance_name}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        rejectCall: true,
+        groupsIgnore: true,
+        alwaysOnline: true,
+        readMessages: true,
+        readStatus: false,
+        syncFullHistory: false
+      })
+    });
+    if (!settingsResult || settingsResult.error) {
+      console.error('Warning: settings config failed for', instance_name);
+    }
+
     // Save clinic in database
     const result = await pool.query(
       'INSERT INTO clinicas (nombre, slug, instance_name) VALUES ($1, $2, $3) RETURNING *',
@@ -713,6 +825,7 @@ app.post('/api/admin/clinicas', requireAuth, requireSuperAdmin, async (req, res)
       ...result.rows[0],
       qrcode: evoResult.qrcode,
       connection_status: 'connecting',
+      webhook_configured: webhookConfigured,
     });
   } catch (err) {
     console.error(err);
