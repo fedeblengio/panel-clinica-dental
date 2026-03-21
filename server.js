@@ -743,10 +743,16 @@ app.get('/api/admin/clinicas', requireAuth, requireSuperAdmin, async (req, res) 
       FROM clinicas c ORDER BY c.nombre
     `);
 
-    // Fetch real status from Evolution API
-    const instances = await evolutionFetch('/instance/fetchInstances');
+    // Fetch real status from Evolution API (optional, don't block clinic list if it fails)
+    let instances = null;
+    try {
+      instances = await evolutionFetch('/instance/fetchInstances');
+    } catch (e) {
+      console.warn('Could not fetch Evolution instances:', e.message);
+    }
+
     const clinicas = result.rows.map(c => {
-      const instance = instances?.find(i => i.name === c.instance_name);
+      const instance = Array.isArray(instances) ? instances.find(i => i.name === c.instance_name) : null;
       return {
         ...c,
         connection_status: instance?.connectionStatus || 'not_found',
