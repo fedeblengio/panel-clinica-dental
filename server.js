@@ -423,16 +423,20 @@ app.put('/api/configuracion', requireAuth, async (req, res) => {
 // --- CONVERSACIONES (chat history) ---
 app.get('/api/conversaciones', requireAuth, async (req, res) => {
   try {
-    // Get distinct sessions with last message
+    // Get distinct sessions with last message (columns: id, session_id, message jsonb)
     const result = await pool.query(`
       SELECT
-        "sessionId" as session_id,
-        MAX("id") as last_id,
+        session_id,
+        MAX(id) as last_id,
         COUNT(*) as total_mensajes,
-        MAX(CASE WHEN "id" = (SELECT MAX("id") FROM n8n_chat_histories h2 WHERE h2."sessionId" = n8n_chat_histories."sessionId") THEN "message" END) as ultimo_mensaje
+        (SELECT h2.message->>'content'
+         FROM n8n_chat_histories h2
+         WHERE h2.session_id = n8n_chat_histories.session_id
+         ORDER BY h2.id DESC LIMIT 1
+        ) as ultimo_mensaje
       FROM n8n_chat_histories
-      GROUP BY "sessionId"
-      ORDER BY MAX("id") DESC
+      GROUP BY session_id
+      ORDER BY MAX(id) DESC
       LIMIT 50
     `);
     res.json(result.rows);
@@ -445,7 +449,13 @@ app.get('/api/conversaciones', requireAuth, async (req, res) => {
 app.get('/api/conversaciones/:sessionId', requireAuth, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT * FROM n8n_chat_histories WHERE "sessionId" = $1 ORDER BY "id" ASC',
+      `SELECT id, session_id, message->>'type' as role, message->>'content' as message
+       FROM n8n_chat_histories
+       WHERE session_id = $1
+         AND message->>'type' IN ('human', 'ai')
+         AND message->>'content' IS NOT NULL
+         AND message->>'content' NOT LIKE 'Calling %'
+       ORDER BY id ASC`,
       [req.params.sessionId]
     );
     res.json(result.rows);
