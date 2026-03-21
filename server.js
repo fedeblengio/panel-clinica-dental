@@ -30,11 +30,14 @@ function getRateLimitInfo(ip) {
   const now = Date.now();
   const record = loginAttempts.get(ip);
   if (!record) return null;
-  if (record.blockedUntil > 0 && now > record.blockedUntil) {
-    loginAttempts.delete(ip);
-    return null;
+  if (record.blockedUntil > 0) {
+    if (now > record.blockedUntil) {
+      loginAttempts.delete(ip);
+      return null;
+    }
+    return record;
   }
-  return record;
+  return null;
 }
 
 function recordFailedAttempt(ip) {
