@@ -9,7 +9,10 @@ const PORT = process.env.PORT || 3000;
 
 // --- EVOLUTION API CONFIG ---
 const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://72.61.62.51';
-const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
+if (!EVOLUTION_API_KEY) {
+  console.warn('WARNING: EVOLUTION_API_KEY not set. Evolution API features will not work.');
+}
 
 async function evolutionFetch(path, options = {}) {
   const url = `${EVOLUTION_API_URL}${path}`;
