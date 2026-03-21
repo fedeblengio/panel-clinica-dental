@@ -7,6 +7,7 @@ import { Pacientes } from './components/Pacientes';
 import { Citas } from './components/Citas';
 import { Conversaciones } from './components/Conversaciones';
 import { Configuracion } from './components/Configuracion';
+import { Ayuda } from './components/Ayuda';
 
 export default function App() {
   const [auth, setAuth] = useState(null);
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="/citas" element={<Citas />} />
           <Route path="/conversaciones" element={<Conversaciones />} />
           <Route path="/configuracion" element={<Configuracion />} />
+          <Route path="/ayuda" element={<Ayuda />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </Layout>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, CalendarDays, MessageSquare, Settings, LogOut, Sun, Moon, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Users, CalendarDays, MessageSquare, Settings, HelpCircle, LogOut, Sun, Moon, Menu, X } from 'lucide-react';
 import { useTheme } from '../lib/useTheme';
 
 const links = [
@@ -9,6 +9,7 @@ const links = [
   { to: '/citas', icon: CalendarDays, label: 'Citas' },
   { to: '/conversaciones', icon: MessageSquare, label: 'Conversaciones' },
   { to: '/configuracion', icon: Settings, label: 'Configuración' },
+  { to: '/ayuda', icon: HelpCircle, label: 'Ayuda' },
 ];
 
 export function Layout({ children, onLogout }) {
