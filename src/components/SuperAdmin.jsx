@@ -38,6 +38,8 @@ export function SuperAdmin() {
   const [qrData, setQrData] = useState(null);
   const [qrClinicaName, setQrClinicaName] = useState('');
   const [qrLoading, setQrLoading] = useState(false);
+  const [qrClinicaId, setQrClinicaId] = useState(null);
+  const [qrConnected, setQrConnected] = useState(false);
   const [formClinica, setFormClinica] = useState(emptyClinica);
   const [formUsuario, setFormUsuario] = useState(emptyUsuario);
   const [editingClinica, setEditingClinica] = useState(null);
@@ -91,20 +93,56 @@ export function SuperAdmin() {
     } catch (err) { setError(err.message); }
   };
 
+  const fetchQR = async (clinicaId) => {
+    try {
+      const result = await api(`/admin/clinicas/${clinicaId}/qrcode`);
+      return result.base64 || result.qrcode?.base64 || result.code || null;
+    } catch (err) {
+      console.error(err);
+      return null;
+    }
+  };
+
+  const checkStatus = async (clinicaId) => {
+    try {
+      const result = await api(`/admin/clinicas/${clinicaId}/status`);
+      return result.connection_status;
+    } catch {
+      return null;
+    }
+  };
+
   const showQR = async (clinicaId, clinicaNombre) => {
     setQrLoading(true);
     setQrClinicaName(clinicaNombre);
+    setQrClinicaId(clinicaId);
+    setQrConnected(false);
     setDialogQR(true);
     setQrData(null);
-    try {
-      const result = await api(`/admin/clinicas/${clinicaId}/qrcode`);
-      setQrData(result.base64 || result.qrcode?.base64 || result.code || null);
-    } catch (err) {
-      console.error(err);
-      setQrData(null);
-    }
+    const qr = await fetchQR(clinicaId);
+    setQrData(qr);
     setQrLoading(false);
   };
+
+  // Auto-refresh QR every 15 seconds and check connection status
+  useEffect(() => {
+    if (!dialogQR || !qrClinicaId || qrConnected) return;
+
+    const interval = setInterval(async () => {
+      // First check if already connected
+      const status = await checkStatus(qrClinicaId);
+      if (status === 'open') {
+        setQrConnected(true);
+        loadClinicas();
+        return;
+      }
+      // If not connected, refresh QR
+      const qr = await fetchQR(qrClinicaId);
+      if (qr) setQrData(qr);
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [dialogQR, qrClinicaId, qrConnected]);
 
   const switchToClinica = async (clinicaId) => {
     await api('/admin/switch-clinica', { method: 'POST', body: { clinicaId } });
@@ -321,9 +359,17 @@ export function SuperAdmin() {
       </Dialog>
 
       {/* Dialog: QR Code */}
-      <Dialog open={dialogQR} onClose={() => setDialogQR(false)} title={`Conectar WhatsApp - ${qrClinicaName}`}>
+      <Dialog open={dialogQR} onClose={() => { setDialogQR(false); setQrClinicaId(null); }} title={`Conectar WhatsApp - ${qrClinicaName}`}>
         <div className="flex flex-col items-center gap-4">
-          {qrLoading ? (
+          {qrConnected ? (
+            <div className="py-8 text-center">
+              <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 300 }}>
+                <Wifi size={48} className="mx-auto text-emerald-500 mb-3" />
+              </motion.div>
+              <p className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">WhatsApp conectado</p>
+              <p className="text-sm text-muted-foreground mt-1">La clínica ya está vinculada correctamente</p>
+            </div>
+          ) : qrLoading ? (
             <div className="py-12 text-center">
               <RefreshCw size={32} className="animate-spin mx-auto text-muted-foreground mb-3" />
               <p className="text-muted-foreground">Generando QR...</p>
@@ -334,7 +380,10 @@ export function SuperAdmin() {
               <div className="bg-white p-4 rounded-xl">
                 <img src={qrData.startsWith('data:') ? qrData : `data:image/png;base64,${qrData}`} alt="QR Code" className="w-64 h-64" />
               </div>
-              <p className="text-xs text-muted-foreground text-center">El QR expira en unos segundos. Si no funciona, cerrá y volvé a abrir.</p>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <RefreshCw size={12} className="animate-spin" />
+                El QR se actualiza automáticamente cada 15 segundos
+              </div>
             </>
           ) : (
             <div className="py-12 text-center">
@@ -342,7 +391,7 @@ export function SuperAdmin() {
               <p className="text-xs text-muted-foreground">La instancia puede estar ya conectada o hubo un error. Intentá actualizar los estados.</p>
             </div>
           )}
-          <Button variant="outline" onClick={() => setDialogQR(false)} className="w-full">Cerrar</Button>
+          <Button variant="outline" onClick={() => { setDialogQR(false); setQrClinicaId(null); }} className="w-full">Cerrar</Button>
         </div>
       </Dialog>
     </div>
