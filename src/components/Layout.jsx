@@ -101,11 +101,11 @@ export function Layout({ children, onLogout }) {
       )}
 
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-64 border-r bg-card flex-col justify-between py-8 px-4 shrink-0">
+      <aside className="hidden md:flex w-64 border-r bg-card flex-col justify-between py-8 px-4 fixed inset-y-0 left-0 z-30">
         {sidebarContent}
       </aside>
 
-      <main className="flex-1 overflow-auto pt-14 md:pt-0">
+      <main className="flex-1 overflow-auto pt-14 md:pt-0 md:ml-64">
         <div className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-12">
           {children}
         </div>
