@@ -191,8 +191,8 @@ export function SuperAdmin() {
                         <th className="pb-3 font-medium text-muted-foreground">Nombre</th>
                         <th className="pb-3 font-medium text-muted-foreground hidden md:table-cell">Instancia</th>
                         <th className="pb-3 font-medium text-muted-foreground">WhatsApp</th>
-                        <th className="pb-3 font-medium text-muted-foreground">Pacientes</th>
-                        <th className="pb-3 font-medium text-muted-foreground">Citas</th>
+                        <th className="pb-3 font-medium text-muted-foreground text-center">Pacientes</th>
+                        <th className="pb-3 font-medium text-muted-foreground text-center">Citas</th>
                         <th className="pb-3 font-medium text-muted-foreground text-right">Acciones</th>
                       </tr>
                     </thead>
@@ -217,8 +217,8 @@ export function SuperAdmin() {
                               )}
                             </div>
                           </td>
-                          <td className="py-4 tabular-nums">{c.total_pacientes}</td>
-                          <td className="py-4 tabular-nums">{c.total_citas}</td>
+                          <td className="py-4 tabular-nums text-center">{c.total_pacientes}</td>
+                          <td className="py-4 tabular-nums text-center">{c.total_citas}</td>
                           <td className="py-4 text-right">
                             <div className="flex gap-1 justify-end">
                               {c.connection_status !== 'open' && (
