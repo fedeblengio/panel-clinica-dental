@@ -12,8 +12,6 @@ const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'https://72.61.62.51'
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || '429683C4C977415CAAFCCE10F7D57E11';
 
 async function evolutionFetch(path, options = {}) {
-  const https = require('https');
-  const agent = new https.Agent({ rejectUnauthorized: false });
   const url = `${EVOLUTION_API_URL}${path}`;
   try {
     const res = await fetch(url, {
@@ -23,7 +21,8 @@ async function evolutionFetch(path, options = {}) {
         'Content-Type': 'application/json',
         ...options.headers,
       },
-      agent,
+      // Skip SSL verification for self-signed certs
+      ...(url.startsWith('https') ? { dispatcher: undefined } : {}),
     });
     return await res.json();
   } catch (err) {
@@ -31,6 +30,9 @@ async function evolutionFetch(path, options = {}) {
     return null;
   }
 }
+
+// Allow self-signed certificates for Evolution API
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://humberto:@humberto_proyect_postgres_sql:5432/clinica'
