@@ -45,6 +45,7 @@ export function SuperAdmin() {
   const [editingClinica, setEditingClinica] = useState(null);
   const [editingUsuario, setEditingUsuario] = useState(null);
   const [error, setError] = useState('');
+  const [qrError, setQrError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
   const loadClinicas = () => api('/admin/clinicas').then(setClinicas).catch(console.error);
@@ -95,10 +96,12 @@ export function SuperAdmin() {
 
   const fetchQR = async (clinicaId) => {
     try {
+      setQrError('');
       const result = await api(`/admin/clinicas/${clinicaId}/qrcode`);
       return result.base64 || result.qrcode?.base64 || result.code || null;
     } catch (err) {
       console.error(err);
+      setQrError(err.message || 'Error al obtener QR');
       return null;
     }
   };
@@ -119,6 +122,7 @@ export function SuperAdmin() {
     setQrConnected(false);
     setDialogQR(true);
     setQrData(null);
+    setQrError('');
     const qr = await fetchQR(clinicaId);
     setQrData(qr);
     setQrLoading(false);
@@ -388,7 +392,11 @@ export function SuperAdmin() {
           ) : (
             <div className="py-12 text-center">
               <p className="text-muted-foreground mb-2">No se pudo generar el QR.</p>
+              {qrError && <p className="text-xs text-red-500 mb-2">{qrError}</p>}
               <p className="text-xs text-muted-foreground">La instancia puede estar ya conectada o hubo un error. Intentá actualizar los estados.</p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => showQR(qrClinicaId, qrClinicaName)}>
+                Reintentar
+              </Button>
             </div>
           )}
           <Button variant="outline" onClick={() => { setDialogQR(false); setQrClinicaId(null); }} className="w-full">Cerrar</Button>

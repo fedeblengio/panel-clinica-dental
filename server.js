@@ -863,11 +863,22 @@ app.get('/api/admin/clinicas/:id/qrcode', requireAuth, requireSuperAdmin, async 
     if (!clinica.rows[0]) return res.status(404).json({ error: 'Clínica no encontrada' });
 
     const instanceName = clinica.rows[0].instance_name;
+
+    if (!EVOLUTION_API_KEY) {
+      return res.status(500).json({ error: 'EVOLUTION_API_KEY no configurada en el servidor' });
+    }
+
     const result = await evolutionFetch(`/instance/connect/${instanceName}`);
-    res.json(result || {});
+    if (!result) {
+      return res.status(502).json({ error: 'No se pudo conectar con Evolution API. Verificá que la URL y API key sean correctas.' });
+    }
+    if (result.error || result.response?.statusCode >= 400) {
+      return res.status(400).json({ error: result.response?.message || result.error || 'Error de Evolution API' });
+    }
+    res.json(result);
   } catch (err) {
-    console.error(err);
-    res.status(400).json({ error: 'Error al obtener QR' });
+    console.error('QR error:', err);
+    res.status(500).json({ error: 'Error interno al obtener QR: ' + err.message });
   }
 });
 
@@ -878,8 +889,13 @@ app.get('/api/admin/clinicas/:id/status', requireAuth, requireSuperAdmin, async 
     if (!clinica.rows[0]) return res.status(404).json({ error: 'Clínica no encontrada' });
 
     const instanceName = clinica.rows[0].instance_name;
-    const instances = await evolutionFetch('/instance/fetchInstances');
-    const instance = instances?.find(i => i.name === instanceName);
+    let instances = null;
+    try {
+      instances = await evolutionFetch('/instance/fetchInstances');
+    } catch (e) {
+      console.warn('Could not fetch instances for status:', e.message);
+    }
+    const instance = Array.isArray(instances) ? instances.find(i => i.name === instanceName) : null;
 
     res.json({
       connection_status: instance?.connectionStatus || 'not_found',
@@ -887,7 +903,7 @@ app.get('/api/admin/clinicas/:id/status', requireAuth, requireSuperAdmin, async 
       profile_name: instance?.profileName || null,
     });
   } catch (err) {
-    console.error(err);
+    console.error('Status error:', err);
     res.status(400).json({ error: 'Error al obtener estado' });
   }
 });
