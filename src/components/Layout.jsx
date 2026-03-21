@@ -24,7 +24,7 @@ export function Layout({ children, onLogout }) {
     navigate('/login');
   };
 
-  const sidebarContent = (
+  const mobileContent = (
     <>
       <div>
         <div className="px-4 mb-12">
@@ -95,17 +95,70 @@ export function Layout({ children, onLogout }) {
             >
               <X size={20} strokeWidth={1.8} />
             </button>
-            {sidebarContent}
+            {mobileContent}
           </aside>
         </div>
       )}
 
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-64 border-r bg-card flex-col justify-between py-8 px-4 fixed inset-y-0 left-0 z-30">
-        {sidebarContent}
+      {/* Desktop sidebar - collapsed, expands on hover */}
+      <aside className="hidden md:flex w-16 hover:w-64 border-r bg-card flex-col justify-between py-6 fixed inset-y-0 left-0 z-30 transition-all duration-300 overflow-hidden group">
+        <div>
+          {/* Logo icon / expanded title */}
+          <div className="flex items-center h-12 mb-6 px-4">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+              <LayoutDashboard size={18} className="text-primary" />
+            </div>
+            <span className="ml-3 text-lg font-bold tracking-tight whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+              Clínica Dental
+            </span>
+          </div>
+
+          <nav className="space-y-1 px-2">
+            {links.map(({ to, icon: Icon, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === '/'}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-3 rounded-lg font-medium transition-all duration-200 whitespace-nowrap ${
+                    isActive
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                  }`
+                }
+              >
+                <Icon size={20} strokeWidth={1.8} className="shrink-0" />
+                <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 text-sm">
+                  {label}
+                </span>
+              </NavLink>
+            ))}
+          </nav>
+        </div>
+
+        <div className="space-y-1 px-2">
+          <button
+            onClick={toggle}
+            className="flex items-center gap-3 px-3 py-3 rounded-lg font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-all duration-200 w-full whitespace-nowrap"
+          >
+            {dark ? <Sun size={20} strokeWidth={1.8} className="shrink-0" /> : <Moon size={20} strokeWidth={1.8} className="shrink-0" />}
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 text-sm">
+              {dark ? 'Modo claro' : 'Modo oscuro'}
+            </span>
+          </button>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-3 py-3 rounded-lg font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-all duration-200 w-full whitespace-nowrap"
+          >
+            <LogOut size={20} strokeWidth={1.8} className="shrink-0" />
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 text-sm">
+              Cerrar sesión
+            </span>
+          </button>
+        </div>
       </aside>
 
-      <main className="flex-1 overflow-auto pt-14 md:pt-0 md:ml-64">
+      <main className="flex-1 overflow-auto pt-14 md:pt-0 md:ml-16">
         <div className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-12">
           {children}
         </div>
