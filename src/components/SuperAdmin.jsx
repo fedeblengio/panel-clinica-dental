@@ -4,7 +4,7 @@ import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Dialog } from './ui/dialog';
-import { Plus, Building2, Users, Pencil, Eye, Wifi, WifiOff, QrCode, RefreshCw, Phone } from 'lucide-react';
+import { Plus, Building2, Users, Pencil, Eye, Wifi, WifiOff, QrCode, RefreshCw, Phone, Activity, MessageSquare, CalendarCheck, AlertTriangle, Shield, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { api, setClinicaId } from '../lib/utils';
 
 const emptyClinica = { nombre: '', slug: '', instance_name: '' };
@@ -47,9 +47,21 @@ export function SuperAdmin() {
   const [error, setError] = useState('');
   const [qrError, setQrError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [monitoreo, setMonitoreo] = useState([]);
+  const [monitoreoLoading, setMonitoreoLoading] = useState(false);
 
   const loadClinicas = () => api('/admin/clinicas').then(setClinicas).catch(console.error);
   const loadUsuarios = () => api('/admin/usuarios').then(setUsuarios).catch(console.error);
+  const loadMonitoreo = async () => {
+    setMonitoreoLoading(true);
+    try {
+      const data = await api('/admin/monitoreo');
+      setMonitoreo(data);
+    } catch (err) {
+      console.error('Error cargando monitoreo:', err);
+    }
+    setMonitoreoLoading(false);
+  };
 
   useEffect(() => { loadClinicas(); loadUsuarios(); }, []);
 
@@ -168,6 +180,9 @@ export function SuperAdmin() {
         </Button>
         <Button variant={tab === 'usuarios' ? 'default' : 'outline'} onClick={() => setTab('usuarios')}>
           <Users size={18} /> Usuarios ({usuarios.length})
+        </Button>
+        <Button variant={tab === 'monitoreo' ? 'default' : 'outline'} onClick={() => { setTab('monitoreo'); if (monitoreo.length === 0) loadMonitoreo(); }}>
+          <Activity size={18} /> Monitoreo
         </Button>
       </div>
 
@@ -310,6 +325,115 @@ export function SuperAdmin() {
               )}
             </CardContent>
           </Card>
+        </motion.div>
+      )}
+
+      {tab === 'monitoreo' && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <div className="flex justify-end mb-4">
+            <Button variant="outline" onClick={loadMonitoreo} disabled={monitoreoLoading}>
+              <RefreshCw size={18} className={monitoreoLoading ? 'animate-spin' : ''} /> Actualizar métricas
+            </Button>
+          </div>
+
+          {monitoreoLoading && monitoreo.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <RefreshCw size={32} className="animate-spin mx-auto mb-3" />
+              <p>Cargando métricas...</p>
+            </div>
+          ) : monitoreo.length === 0 ? (
+            <p className="text-muted-foreground text-center py-12">No hay datos de monitoreo disponibles</p>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {monitoreo.map((m, i) => {
+                const riskConfig = {
+                  bajo: { color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300', icon: ShieldCheck, border: 'border-emerald-200 dark:border-emerald-500/30' },
+                  medio: { color: 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300', icon: Shield, border: 'border-amber-200 dark:border-amber-500/30' },
+                  alto: { color: 'bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300', icon: ShieldAlert, border: 'border-red-200 dark:border-red-500/30' },
+                };
+                const risk = riskConfig[m.riesgo] || riskConfig.bajo;
+                const RiskIcon = risk.icon;
+
+                return (
+                  <motion.div key={m.clinica_id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}>
+                    <Card className={`border-2 ${risk.border}`}>
+                      <CardContent className="space-y-4">
+                        {/* Header */}
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="font-semibold text-lg">{m.clinica_nombre}</h3>
+                            <p className="text-xs text-muted-foreground font-mono">{m.instance_name}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <ConnectionBadge status={m.connection_status} />
+                            <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${risk.color}`}>
+                              <RiskIcon size={12} />
+                              Riesgo {m.riesgo}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* WhatsApp info */}
+                        {m.whatsapp_number && (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Phone size={14} /> +{m.whatsapp_number}
+                            {m.profile_name && <span>· {m.profile_name}</span>}
+                          </div>
+                        )}
+
+                        {/* Metrics grid */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div className="bg-muted/50 rounded-lg p-3 text-center">
+                            <MessageSquare size={16} className="mx-auto mb-1 text-blue-500" />
+                            <p className="text-xl font-bold tabular-nums">{m.bot_msgs_total || 0}</p>
+                            <p className="text-[10px] text-muted-foreground leading-tight">Mensajes bot</p>
+                          </div>
+                          <div className="bg-muted/50 rounded-lg p-3 text-center">
+                            <Users size={16} className="mx-auto mb-1 text-violet-500" />
+                            <p className="text-xl font-bold tabular-nums">{m.bot_contactos_unicos || 0}</p>
+                            <p className="text-[10px] text-muted-foreground leading-tight">Contactos</p>
+                          </div>
+                          <div className="bg-muted/50 rounded-lg p-3 text-center">
+                            <CalendarCheck size={16} className="mx-auto mb-1 text-emerald-500" />
+                            <p className="text-xl font-bold tabular-nums">{m.recordatorios_24h || 0}</p>
+                            <p className="text-[10px] text-muted-foreground leading-tight">Recordatorios 24h</p>
+                          </div>
+                          <div className="bg-muted/50 rounded-lg p-3 text-center">
+                            <CalendarCheck size={16} className="mx-auto mb-1 text-amber-500" />
+                            <p className="text-xl font-bold tabular-nums">{m.recordatorios_1h || 0}</p>
+                            <p className="text-[10px] text-muted-foreground leading-tight">Recordatorios 1h</p>
+                          </div>
+                        </div>
+
+                        {/* Bot vs Human breakdown */}
+                        <div className="flex items-center gap-3 text-sm">
+                          <span className="text-muted-foreground">Bot: <strong>{m.bot_msgs_ia || 0}</strong></span>
+                          <span className="text-muted-foreground">·</span>
+                          <span className="text-muted-foreground">Humanos: <strong>{m.bot_msgs_humanos || 0}</strong></span>
+                          <span className="text-muted-foreground">·</span>
+                          <span className="text-muted-foreground">Citas: <strong>{m.total_citas || 0}</strong></span>
+                          {m.bot_msgs_por_dia > 0 && (
+                            <>
+                              <span className="text-muted-foreground">·</span>
+                              <span className="text-muted-foreground">{m.bot_msgs_por_dia} msgs/día</span>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Risk detail */}
+                        {m.riesgo !== 'bajo' && (
+                          <div className={`flex items-start gap-2 rounded-lg px-3 py-2 text-xs ${risk.color}`}>
+                            <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                            <span>{m.riesgo_detalle || (m.riesgo === 'alto' ? 'Alto volumen de mensajes. Considerá reducir la frecuencia.' : 'Volumen moderado. Monitoreá la actividad.')}</span>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
         </motion.div>
       )}
 

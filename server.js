@@ -908,6 +908,110 @@ app.get('/api/admin/clinicas/:id/status', requireAuth, requireSuperAdmin, async 
   }
 });
 
+// --- SUPER ADMIN: MONITOREO ---
+app.get('/api/admin/monitoreo', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    // Get all clinics
+    const clinicas = await pool.query('SELECT id, nombre, instance_name FROM clinicas WHERE activa = true ORDER BY id');
+
+    // Get Evolution API instances
+    let instances = [];
+    try {
+      const result = await evolutionFetch('/instance/fetchInstances');
+      if (Array.isArray(result)) instances = result;
+    } catch (e) {
+      console.warn('Monitoreo: Could not fetch Evolution instances:', e.message);
+    }
+
+    // Get bot message counts per clinic
+    const botStats = await pool.query(`
+      SELECT clinica_id,
+        count(*) as total_bot_msgs,
+        count(DISTINCT session_id) as contactos_unicos,
+        count(*) FILTER (WHERE message->>'type' = 'ai') as msgs_bot,
+        count(*) FILTER (WHERE message->>'type' = 'human') as msgs_humanos
+      FROM n8n_chat_histories
+      WHERE clinica_id IS NOT NULL
+      GROUP BY clinica_id
+    `);
+
+    // Get reminder counts per clinic
+    const reminderStats = await pool.query(`
+      SELECT clinica_id,
+        count(*) FILTER (WHERE recordatorio_24h = true) as rec_24h_enviados,
+        count(*) FILTER (WHERE recordatorio_1h = true) as rec_1h_enviados,
+        count(*) as total_citas
+      FROM citas
+      WHERE clinica_id IS NOT NULL
+      GROUP BY clinica_id
+    `);
+
+    const monitoreo = clinicas.rows.map(c => {
+      const evoInstance = instances.find(i => i.name === c.instance_name);
+      const botStat = botStats.rows.find(s => s.clinica_id === c.id) || {};
+      const remStat = reminderStats.rows.find(s => s.clinica_id === c.id) || {};
+
+      const evoMsgs = evoInstance?._count?.Message || 0;
+      const evoContacts = evoInstance?._count?.Contact || 0;
+      const evoChats = evoInstance?._count?.Chat || 0;
+      const createdAt = evoInstance?.createdAt || null;
+
+      // Calculate days since instance creation
+      const daysActive = createdAt ? Math.max(1, Math.floor((Date.now() - new Date(createdAt).getTime()) / 86400000)) : 1;
+      const botMsgsPerDay = Math.round((parseInt(botStat.msgs_bot || 0)) / daysActive);
+      const totalReminders = parseInt(remStat.rec_24h_enviados || 0) + parseInt(remStat.rec_1h_enviados || 0);
+
+      // Risk calculation
+      let riesgo = 'bajo';
+      let riesgoDetalle = 'Volumen bajo, uso reactivo';
+      if (botMsgsPerDay > 200 || (daysActive < 7 && parseInt(botStat.msgs_bot || 0) > 100)) {
+        riesgo = 'alto';
+        riesgoDetalle = botMsgsPerDay > 200
+          ? `${botMsgsPerDay} msgs/día del bot supera el límite seguro`
+          : 'Número nuevo con alto volumen de mensajes';
+      } else if (botMsgsPerDay > 50 || totalReminders > 50) {
+        riesgo = 'medio';
+        riesgoDetalle = botMsgsPerDay > 50
+          ? `${botMsgsPerDay} msgs/día del bot, acercándose al límite`
+          : `${totalReminders} recordatorios enviados, monitorear volumen`;
+      }
+
+      return {
+        clinica_id: c.id,
+        clinica_nombre: c.nombre,
+        instance_name: c.instance_name,
+        connection_status: evoInstance?.connectionStatus || 'not_found',
+        whatsapp_number: evoInstance?.ownerJid?.replace('@s.whatsapp.net', '') || null,
+        profile_name: evoInstance?.profileName || null,
+        // Evolution API stats
+        evo_mensajes: evoMsgs,
+        evo_contactos: evoContacts,
+        evo_chats: evoChats,
+        evo_created: createdAt,
+        dias_activo: daysActive,
+        // Bot stats (from DB)
+        bot_msgs_total: parseInt(botStat.total_bot_msgs || 0),
+        bot_msgs_ia: parseInt(botStat.msgs_bot || 0),
+        bot_msgs_humanos: parseInt(botStat.msgs_humanos || 0),
+        bot_contactos_unicos: parseInt(botStat.contactos_unicos || 0),
+        bot_msgs_por_dia: botMsgsPerDay,
+        // Reminders
+        recordatorios_24h: parseInt(remStat.rec_24h_enviados || 0),
+        recordatorios_1h: parseInt(remStat.rec_1h_enviados || 0),
+        total_citas: parseInt(remStat.total_citas || 0),
+        // Risk
+        riesgo,
+        riesgo_detalle: riesgoDetalle,
+      };
+    });
+
+    res.json(monitoreo);
+  } catch (err) {
+    console.error('Monitoreo error:', err);
+    res.status(500).json({ error: 'Error al obtener métricas de monitoreo' });
+  }
+});
+
 // --- SUPER ADMIN: USUARIOS ---
 app.get('/api/admin/usuarios', requireAuth, requireSuperAdmin, async (req, res) => {
   try {
