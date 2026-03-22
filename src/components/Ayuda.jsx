@@ -196,40 +196,9 @@ export function Ayuda() {
         </div>
       </motion.div>
 
-      {/* Preguntas frecuentes */}
-      <div className="mb-8">
-        <div className="flex items-center gap-2 mb-4">
-          <HelpCircle size={20} className="text-muted-foreground" />
-          <h2 className="text-lg font-semibold">Preguntas frecuentes</h2>
-        </div>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.4 }}>
-        <Card>
-          <CardContent className="divide-y-0">
-            {faqs.map((faq, i) => (
-              <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05, duration: 0.3 }}>
-                <FaqItem {...faq} />
-              </motion.div>
-            ))}
-          </CardContent>
-        </Card>
-        </motion.div>
-      </div>
-
-      {/* Guías por sección */}
-      <div className="mb-8">
-        <h2 className="text-lg font-semibold mb-4">Guías por sección</h2>
-        <div className="space-y-3">
-          {guias.map((guia, i) => (
-            <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1, duration: 0.4 }}>
-              <GuiaSection {...guia} />
-            </motion.div>
-          ))}
-        </div>
-      </div>
-
-      {/* Contacto soporte */}
-      {soporte.length > 0 ? (
-        <div>
+      {/* Soporte técnico */}
+      {soporte.length > 0 && (
+        <div className="mb-8">
           <h2 className="text-lg font-semibold mb-4">Soporte Técnico</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {soporte.map((s, i) => (
@@ -263,23 +232,39 @@ export function Ayuda() {
             ))}
           </div>
         </div>
-      ) : (
+      )}
+
+      {/* Preguntas frecuentes */}
+      <div className="mb-8">
+        <div className="flex items-center gap-2 mb-4">
+          <HelpCircle size={20} className="text-muted-foreground" />
+          <h2 className="text-lg font-semibold">Preguntas frecuentes</h2>
+        </div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.4 }}>
         <Card>
-          <CardContent>
-            <div className="flex items-start gap-4 py-2">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <Mail size={20} className="text-primary" />
-              </div>
-              <div>
-                <h3 className="font-semibold">¿No encontrás lo que buscás?</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Si tenés alguna duda que no está cubierta acá, contactá a soporte técnico para recibir ayuda personalizada.
-                </p>
-              </div>
-            </div>
+          <CardContent className="divide-y-0">
+            {faqs.map((faq, i) => (
+              <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05, duration: 0.3 }}>
+                <FaqItem {...faq} />
+              </motion.div>
+            ))}
           </CardContent>
         </Card>
-      )}
+        </motion.div>
+      </div>
+
+      {/* Guías por sección */}
+      <div className="mb-8">
+        <h2 className="text-lg font-semibold mb-4">Guías por sección</h2>
+        <div className="space-y-3">
+          {guias.map((guia, i) => (
+            <motion.div key={i} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1, duration: 0.4 }}>
+              <GuiaSection {...guia} />
+            </motion.div>
+          ))}
+        </div>
+      </div>
+
     </div>
   );
 }
