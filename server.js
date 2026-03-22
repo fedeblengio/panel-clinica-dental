@@ -173,6 +173,20 @@ async function initDB() {
       )
     `);
 
+    // Soporte tecnico table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS soporte_tecnico (
+        id SERIAL PRIMARY KEY,
+        nombre VARCHAR(255) NOT NULL,
+        rol VARCHAR(100) DEFAULT 'Soporte Técnico',
+        email VARCHAR(255),
+        whatsapp VARCHAR(50),
+        activo BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('Tabla soporte_tecnico lista');
+
     // Add clinica_id columns to existing tables
     await pool.query(`ALTER TABLE configuracion_clinica ADD COLUMN IF NOT EXISTS clinica_id INTEGER REFERENCES clinicas(id)`).catch(() => {});
     await pool.query(`ALTER TABLE pacientes ADD COLUMN IF NOT EXISTS clinica_id INTEGER REFERENCES clinicas(id)`).catch(() => {});
@@ -750,6 +764,17 @@ app.get('/api/conversaciones/:sessionId', requireAuth, requireClinica, async (re
   }
 });
 
+// --- SOPORTE TECNICO (visible para todos los admins) ---
+app.get('/api/soporte', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT id, nombre, rol, email, whatsapp FROM soporte_tecnico WHERE activo = true ORDER BY id');
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Soporte error:', err);
+    res.json([]);
+  }
+});
+
 // --- SUPER ADMIN: CLINICAS ---
 app.get('/api/admin/clinicas', requireAuth, requireSuperAdmin, async (req, res) => {
   try {
@@ -1027,6 +1052,57 @@ app.get('/api/admin/monitoreo', requireAuth, requireSuperAdmin, async (req, res)
   } catch (err) {
     console.error('Monitoreo error:', err);
     res.status(500).json({ error: 'Error al obtener métricas de monitoreo' });
+  }
+});
+
+// --- SUPER ADMIN: SOPORTE TECNICO ---
+app.get('/api/admin/soporte', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM soporte_tecnico ORDER BY id');
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Admin soporte error:', err);
+    res.json([]);
+  }
+});
+
+app.post('/api/admin/soporte', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const { nombre, rol, email, whatsapp } = req.body;
+    if (!nombre) return res.status(400).json({ error: 'El nombre es obligatorio' });
+    const result = await pool.query(
+      'INSERT INTO soporte_tecnico (nombre, rol, email, whatsapp) VALUES ($1, $2, $3, $4) RETURNING *',
+      [nombre, rol || 'Soporte Técnico', email || null, whatsapp || null]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Create soporte error:', err);
+    res.status(500).json({ error: 'Error al crear contacto de soporte' });
+  }
+});
+
+app.put('/api/admin/soporte/:id', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const { nombre, rol, email, whatsapp, activo } = req.body;
+    const result = await pool.query(
+      'UPDATE soporte_tecnico SET nombre = $1, rol = $2, email = $3, whatsapp = $4, activo = $5 WHERE id = $6 RETURNING *',
+      [nombre, rol, email || null, whatsapp || null, activo !== false, req.params.id]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Contacto no encontrado' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Update soporte error:', err);
+    res.status(500).json({ error: 'Error al actualizar contacto' });
+  }
+});
+
+app.delete('/api/admin/soporte/:id', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM soporte_tecnico WHERE id = $1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Delete soporte error:', err);
+    res.status(500).json({ error: 'Error al eliminar contacto' });
   }
 });
 

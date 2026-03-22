@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent } from './ui/card';
-import { HelpCircle, ChevronDown, LayoutDashboard, Users, CalendarDays, MessageSquare, Settings, Bot, Mail } from 'lucide-react';
+import { HelpCircle, ChevronDown, LayoutDashboard, Users, CalendarDays, MessageSquare, Settings, Bot, Mail, Phone, MessageCircle } from 'lucide-react';
+import { api } from '../lib/utils';
 
 const faqs = [
   {
@@ -183,6 +184,9 @@ function GuiaSection({ icon: Icon, titulo, items }) {
 }
 
 export function Ayuda() {
+  const [soporte, setSoporte] = useState([]);
+  useEffect(() => { api('/soporte').then(setSoporte).catch(console.error); }, []);
+
   return (
     <div>
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between mb-6 sm:mb-8">
@@ -224,21 +228,58 @@ export function Ayuda() {
       </div>
 
       {/* Contacto soporte */}
-      <Card>
-        <CardContent>
-          <div className="flex items-start gap-4 py-2">
-            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-              <Mail size={20} className="text-primary" />
-            </div>
-            <div>
-              <h3 className="font-semibold">¿No encontrás lo que buscás?</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                Si tenés alguna duda que no está cubierta acá, contactá a soporte técnico para recibir ayuda personalizada.
-              </p>
-            </div>
+      {soporte.length > 0 ? (
+        <div>
+          <h2 className="text-lg font-semibold mb-4">Soporte Técnico</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {soporte.map((s, i) => (
+              <motion.div key={s.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.1 }}>
+                <Card>
+                  <CardContent className="flex items-start gap-4 py-4">
+                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <Mail size={22} className="text-primary" />
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <h3 className="font-semibold text-base">{s.nombre}</h3>
+                        <p className="text-sm text-muted-foreground">{s.rol}</p>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        {s.email && (
+                          <a href={`mailto:${s.email}`} className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-2">
+                            <Mail size={14} /> {s.email}
+                          </a>
+                        )}
+                        {s.whatsapp && (
+                          <a href={`https://wa.me/${s.whatsapp}`} target="_blank" rel="noopener noreferrer" className="text-sm text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-2">
+                            <MessageCircle size={14} /> Escribir por WhatsApp
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      ) : (
+        <Card>
+          <CardContent>
+            <div className="flex items-start gap-4 py-2">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <Mail size={20} className="text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold">¿No encontrás lo que buscás?</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Si tenés alguna duda que no está cubierta acá, contactá a soporte técnico para recibir ayuda personalizada.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

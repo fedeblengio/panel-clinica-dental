@@ -4,7 +4,7 @@ import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Dialog } from './ui/dialog';
-import { Plus, Building2, Users, Pencil, Eye, Wifi, WifiOff, QrCode, RefreshCw, Phone, Activity, MessageSquare, CalendarCheck, AlertTriangle, Shield, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { Plus, Building2, Users, Pencil, Eye, Wifi, WifiOff, QrCode, RefreshCw, Phone, Activity, MessageSquare, CalendarCheck, AlertTriangle, Shield, ShieldAlert, ShieldCheck, Headphones, Trash2, Mail, MessageCircle } from 'lucide-react';
 import { api, setClinicaId } from '../lib/utils';
 
 const emptyClinica = { nombre: '', slug: '', instance_name: '' };
@@ -49,6 +49,10 @@ export function SuperAdmin() {
   const [refreshing, setRefreshing] = useState(false);
   const [monitoreo, setMonitoreo] = useState([]);
   const [monitoreoLoading, setMonitoreoLoading] = useState(false);
+  const [soporte, setSoporte] = useState([]);
+  const [dialogSoporte, setDialogSoporte] = useState(false);
+  const [formSoporte, setFormSoporte] = useState({ nombre: '', rol: 'Soporte Técnico', email: '', whatsapp: '' });
+  const [editingSoporte, setEditingSoporte] = useState(null);
 
   const loadClinicas = () => api('/admin/clinicas').then(setClinicas).catch(console.error);
   const loadUsuarios = () => api('/admin/usuarios').then(setUsuarios).catch(console.error);
@@ -62,8 +66,9 @@ export function SuperAdmin() {
     }
     setMonitoreoLoading(false);
   };
+  const loadSoporte = () => api('/admin/soporte').then(setSoporte).catch(console.error);
 
-  useEffect(() => { loadClinicas(); loadUsuarios(); }, []);
+  useEffect(() => { loadClinicas(); loadUsuarios(); loadSoporte(); }, []);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -104,6 +109,28 @@ export function SuperAdmin() {
       setDialogUsuario(false);
       loadUsuarios();
     } catch (err) { setError(err.message); }
+  };
+
+  const handleSaveSoporte = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      if (editingSoporte) {
+        await api(`/admin/soporte/${editingSoporte}`, { method: 'PUT', body: formSoporte });
+      } else {
+        await api('/admin/soporte', { method: 'POST', body: formSoporte });
+      }
+      setDialogSoporte(false);
+      loadSoporte();
+    } catch (err) { setError(err.message); }
+  };
+
+  const handleDeleteSoporte = async (id) => {
+    if (!confirm('¿Eliminar este contacto de soporte?')) return;
+    try {
+      await api(`/admin/soporte/${id}`, { method: 'DELETE' });
+      loadSoporte();
+    } catch (err) { console.error(err); }
   };
 
   const fetchQR = async (clinicaId) => {
@@ -183,6 +210,9 @@ export function SuperAdmin() {
         </Button>
         <Button variant={tab === 'monitoreo' ? 'default' : 'outline'} onClick={() => { setTab('monitoreo'); if (monitoreo.length === 0) loadMonitoreo(); }}>
           <Activity size={18} /> Monitoreo
+        </Button>
+        <Button variant={tab === 'soporte' ? 'default' : 'outline'} onClick={() => setTab('soporte')}>
+          <Headphones size={18} /> Soporte ({soporte.length})
         </Button>
       </div>
 
@@ -437,6 +467,65 @@ export function SuperAdmin() {
         </motion.div>
       )}
 
+      {tab === 'soporte' && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <div className="flex justify-end mb-4">
+            <Button onClick={() => { setFormSoporte({ nombre: '', rol: 'Soporte Técnico', email: '', whatsapp: '' }); setEditingSoporte(null); setError(''); setDialogSoporte(true); }}>
+              <Plus size={18} /> Nuevo contacto
+            </Button>
+          </div>
+          <Card>
+            <CardContent>
+              {soporte.length > 0 ? (
+                <div className="space-y-4">
+                  {soporte.map((s, i) => (
+                    <motion.div key={s.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
+                      className="flex items-center justify-between py-4 border-b last:border-0">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                          <Headphones size={22} className="text-primary" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-lg">{s.nombre}</p>
+                          <p className="text-sm text-muted-foreground">{s.rol}</p>
+                          <div className="flex items-center gap-4 mt-1">
+                            {s.email && (
+                              <a href={`mailto:${s.email}`} className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">
+                                <Mail size={14} /> {s.email}
+                              </a>
+                            )}
+                            {s.whatsapp && (
+                              <a href={`https://wa.me/${s.whatsapp}`} target="_blank" rel="noopener noreferrer" className="text-sm text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1">
+                                <MessageCircle size={14} /> +{s.whatsapp}
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => {
+                          setFormSoporte({ nombre: s.nombre, rol: s.rol, email: s.email || '', whatsapp: s.whatsapp || '', activo: s.activo });
+                          setEditingSoporte(s.id);
+                          setError('');
+                          setDialogSoporte(true);
+                        }}>
+                          <Pencil size={16} />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDeleteSoporte(s.id)}>
+                          <Trash2 size={16} className="text-red-500" />
+                        </Button>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-center py-12">No hay contactos de soporte. Agregá uno para que los admins puedan contactarte.</p>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
       {/* Dialog: Nueva/Editar Clínica */}
       <Dialog open={dialogClinica} onClose={() => setDialogClinica(false)} title={editingClinica ? 'Editar clínica' : 'Nueva clínica'}>
         <form onSubmit={handleSaveClinica} className="space-y-4">
@@ -525,6 +614,21 @@ export function SuperAdmin() {
           )}
           <Button variant="outline" onClick={() => { setDialogQR(false); setQrClinicaId(null); }} className="w-full">Cerrar</Button>
         </div>
+      </Dialog>
+
+      {/* Dialog: Nuevo/Editar Soporte */}
+      <Dialog open={dialogSoporte} onClose={() => setDialogSoporte(false)} title={editingSoporte ? 'Editar contacto' : 'Nuevo contacto de soporte'}>
+        <form onSubmit={handleSaveSoporte} className="space-y-4">
+          {error && <div className="bg-red-50 text-red-700 border border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-500/30 rounded-lg px-4 py-3 text-sm">{error}</div>}
+          <Input label="Nombre *" value={formSoporte.nombre} onChange={e => setFormSoporte({ ...formSoporte, nombre: e.target.value })} required placeholder="Humberto Rivero" />
+          <Input label="Rol" value={formSoporte.rol} onChange={e => setFormSoporte({ ...formSoporte, rol: e.target.value })} placeholder="Soporte Técnico" />
+          <Input label="Email" type="email" value={formSoporte.email} onChange={e => setFormSoporte({ ...formSoporte, email: e.target.value })} placeholder="correo@ejemplo.com" />
+          <Input label="WhatsApp (con código de país, sin +)" value={formSoporte.whatsapp} onChange={e => setFormSoporte({ ...formSoporte, whatsapp: e.target.value.replace(/[^0-9]/g, '') })} placeholder="595981123456" />
+          <div className="flex gap-3 pt-2">
+            <Button type="submit" className="flex-1">{editingSoporte ? 'Guardar cambios' : 'Agregar contacto'}</Button>
+            <Button type="button" variant="outline" onClick={() => setDialogSoporte(false)}>Cancelar</Button>
+          </div>
+        </form>
       </Dialog>
     </div>
   );
