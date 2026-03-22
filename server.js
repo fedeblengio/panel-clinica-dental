@@ -370,7 +370,7 @@ app.get('/api/metricas', requireAuth, requireClinica, async (req, res) => {
       SELECT TO_CHAR(fecha_cita, 'YYYY-MM') as mes, COUNT(*) as total,
         COUNT(*) FILTER (WHERE estado = 'Completada') as completadas,
         COUNT(*) FILTER (WHERE estado = 'Cancelada') as canceladas,
-        COUNT(*) FILTER (WHERE estado = 'Pendiente' AND fecha_cita < CURRENT_DATE) as no_show
+        COUNT(*) FILTER (WHERE estado = 'No Asistio') as no_show
       FROM citas WHERE fecha_cita >= CURRENT_DATE - INTERVAL '6 months' AND clinica_id = $1
       GROUP BY TO_CHAR(fecha_cita, 'YYYY-MM') ORDER BY mes
     `, [cid]);
@@ -385,7 +385,7 @@ app.get('/api/metricas', requireAuth, requireClinica, async (req, res) => {
       SELECT COUNT(*) as total_citas,
         COUNT(*) FILTER (WHERE estado = 'Completada') as completadas,
         COUNT(*) FILTER (WHERE estado = 'Cancelada') as canceladas,
-        COUNT(*) FILTER (WHERE estado = 'Pendiente' AND fecha_cita < CURRENT_DATE) as no_show
+        COUNT(*) FILTER (WHERE estado = 'No Asistio') as no_show
       FROM citas WHERE fecha_cita >= CURRENT_DATE - INTERVAL '30 days' AND clinica_id = $1
     `, [cid]);
 
@@ -417,6 +417,24 @@ app.get('/api/metricas', requireAuth, requireClinica, async (req, res) => {
       resumen: { total_citas: 0, completadas: 0, canceladas: 0, no_show: 0 },
       recordatorios: { enviados_24h: 0, enviados_1h: 0 },
     });
+  }
+});
+
+// --- AUTO MARCAR NO ASISTIO ---
+app.post('/api/citas/auto-no-asistio', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      UPDATE citas SET estado = 'No Asistio'
+      WHERE estado IN ('Pendiente', 'Confirmada')
+        AND fecha_cita < CURRENT_DATE
+        AND clinica_id IS NOT NULL
+      RETURNING id, paciente_nombre, fecha_cita, estado
+    `);
+    console.log(`Auto No Asistio: ${result.rowCount} citas actualizadas`);
+    res.json({ actualizadas: result.rowCount, citas: result.rows });
+  } catch (err) {
+    console.error('Auto no-asistio error:', err);
+    res.status(500).json({ error: 'Error al actualizar citas' });
   }
 });
 
@@ -1071,6 +1089,25 @@ app.use(express.static(path.join(__dirname, 'dist')));
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
+
+// --- AUTO MARCAR "No Asistio" (corre cada hora, idempotente) ---
+async function autoMarcarNoAsistio() {
+  try {
+    const result = await pool.query(`
+      UPDATE citas SET estado = 'No Asistio'
+      WHERE estado IN ('Pendiente', 'Confirmada')
+        AND fecha_cita < CURRENT_DATE
+        AND clinica_id IS NOT NULL
+    `);
+    if (result.rowCount > 0) {
+      console.log(`Auto No Asistio: ${result.rowCount} citas actualizadas`);
+    }
+  } catch (err) {
+    console.error('Auto no-asistio error:', err);
+  }
+}
+setInterval(autoMarcarNoAsistio, 60 * 60 * 1000); // cada hora
+setTimeout(autoMarcarNoAsistio, 15000); // 15s después de iniciar
 
 app.listen(PORT, () => {
   console.log(`Panel Clínica Dental corriendo en puerto ${PORT}`);

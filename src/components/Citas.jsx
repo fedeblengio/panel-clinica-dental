@@ -9,7 +9,7 @@ import { Plus, Filter, Pencil, Trash2, List, CalendarDays, ChevronLeft, ChevronR
 import { api } from '../lib/utils';
 
 const TIPOS = ['Limpieza dental', 'Consulta general', 'Ortodoncia', 'Endodoncia', 'Extracción', 'Blanqueamiento', 'Implante', 'Corona', 'Revisión', 'Urgencia', 'Otro'];
-const ESTADOS = ['Pendiente', 'Confirmada', 'Cancelada', 'Completada', 'Modificada'];
+const ESTADOS = ['Pendiente', 'Confirmada', 'Cancelada', 'Completada', 'Modificada', 'No Asistio'];
 
 const empty = { paciente_telefono: '', fecha_cita: '', hora_cita: '', tipo_cita: '', estado: 'Pendiente', notas: '' };
 
@@ -51,6 +51,7 @@ const statusColor = {
   Cancelada: 'bg-red-100 border-red-300 text-red-900 dark:bg-red-500/20 dark:border-red-500/40 dark:text-red-300',
   Completada: 'bg-blue-100 border-blue-300 text-blue-900 dark:bg-blue-500/20 dark:border-blue-500/40 dark:text-blue-300',
   Modificada: 'bg-violet-100 border-violet-300 text-violet-900 dark:bg-violet-500/20 dark:border-violet-500/40 dark:text-violet-300',
+  'No Asistio': 'bg-amber-100 border-amber-300 text-amber-900 dark:bg-amber-500/20 dark:border-amber-500/40 dark:text-amber-300',
 };
 
 const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
