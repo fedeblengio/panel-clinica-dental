@@ -312,7 +312,7 @@ export function SuperAdmin() {
                     <thead>
                       <tr className="border-b text-left">
                         <th className="pb-3 font-medium text-muted-foreground">Nombre</th>
-                        <th className="pb-3 font-medium text-muted-foreground">Usuario</th>
+                        <th className="pb-3 font-medium text-muted-foreground">Login</th>
                         <th className="pb-3 font-medium text-muted-foreground">Rol</th>
                         <th className="pb-3 font-medium text-muted-foreground hidden md:table-cell">Clínica</th>
                         <th className="pb-3 font-medium text-muted-foreground">Estado</th>
