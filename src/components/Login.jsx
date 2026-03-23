@@ -157,7 +157,7 @@ export function Login({ onLogin }) {
       </div>
 
       {/* Right panel - Login form */}
-      <div className="flex-1 flex items-center justify-center bg-slate-50 dark:bg-slate-900/50 px-4 sm:px-8">
+      <div className="flex-1 flex items-center justify-center bg-[hsl(210,30%,12%)] px-4 sm:px-8 dark">
         <motion.div
           className="w-full max-w-sm"
           initial={{ opacity: 0, y: 20, scale: 0.95 }}
@@ -169,13 +169,13 @@ export function Login({ onLogin }) {
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-sky-500 to-teal-500 flex items-center justify-center mb-4 shadow-lg shadow-sky-500/25">
               <DentalLogo size={30} className="text-white" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight">DentalPanel</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">DentalPanel</h1>
             <p className="text-muted-foreground text-sm mt-1">Gestión inteligente para tu clínica</p>
           </div>
 
           {/* Desktop heading */}
           <div className="hidden lg:block text-left mb-8">
-            <h1 className="text-2xl font-bold tracking-tight">Bienvenido</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">Bienvenido</h1>
             <p className="text-muted-foreground mt-1">Ingresá tus credenciales para continuar</p>
           </div>
 
@@ -196,8 +196,8 @@ export function Login({ onLogin }) {
                 >
                   <div className={`border rounded-lg px-4 py-3 text-sm ${
                     isBlocked
-                      ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-400 dark:border-amber-500/30'
-                      : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-500/30'
+                      ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                      : 'bg-red-500/15 text-red-400 border-red-500/30'
                   }`}>
                     {error}
                     {isBlocked && (
