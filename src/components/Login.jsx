@@ -218,7 +218,7 @@ export function Login({ onLogin }) {
               autoFocus
               disabled={isBlocked}
               className="bg-[hsl(210,20%,7%)] border-slate-600 text-white placeholder:text-neutral-400"
-              labelClassName="text-slate-300"
+              labelClassName="text-neutral-400"
             />
             <Input
               label="Contraseña"
@@ -229,7 +229,7 @@ export function Login({ onLogin }) {
               required
               disabled={isBlocked}
               className="bg-[hsl(210,20%,7%)] border-slate-600 text-white placeholder:text-neutral-400"
-              labelClassName="text-slate-300"
+              labelClassName="text-neutral-400"
             />
             <Button type="submit" className="w-full" size="lg" disabled={loading || isBlocked}>
               {isBlocked ? `Bloqueado (${blockedFor}s)` : loading ? 'Ingresando...' : 'Iniciar sesión'}
