@@ -1,9 +1,9 @@
 import { cn } from '../../lib/utils';
 
-export function Input({ className, label, ...props }) {
+export function Input({ className, label, labelClassName, ...props }) {
   return (
     <div className="space-y-2">
-      {label && <label className="text-sm font-medium text-foreground">{label}</label>}
+      {label && <label className={cn("text-sm font-medium text-foreground", labelClassName)}>{label}</label>}
       <input
         className={cn(
           'flex h-12 w-full rounded-lg border border-input bg-background px-4 text-base transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',

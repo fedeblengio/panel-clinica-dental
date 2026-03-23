@@ -169,14 +169,14 @@ export function Login({ onLogin }) {
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-sky-500 to-teal-500 flex items-center justify-center mb-4 shadow-lg shadow-sky-500/25">
               <DentalLogo size={30} className="text-white" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight">DentalPanel</h1>
-            <p className="text-muted-foreground text-sm mt-1">Gestión inteligente para tu clínica</p>
+            <h1 className="text-2xl font-bold tracking-tight text-white">DentalPanel</h1>
+            <p className="text-slate-400 text-sm mt-1">Gestión inteligente para tu clínica</p>
           </div>
 
           {/* Desktop heading */}
           <div className="hidden lg:block text-left mb-8">
-            <h1 className="text-2xl font-bold tracking-tight">Bienvenido</h1>
-            <p className="text-muted-foreground mt-1">Ingresá tus credenciales para continuar</p>
+            <h1 className="text-2xl font-bold tracking-tight text-white">Bienvenido</h1>
+            <p className="text-slate-400 mt-1">Ingresá tus credenciales para continuar</p>
           </div>
 
           <motion.form
@@ -217,6 +217,8 @@ export function Login({ onLogin }) {
               required
               autoFocus
               disabled={isBlocked}
+              className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400"
+              labelClassName="text-slate-300"
             />
             <Input
               label="Contraseña"
@@ -226,6 +228,8 @@ export function Login({ onLogin }) {
               placeholder="Ingresá tu contraseña"
               required
               disabled={isBlocked}
+              className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400"
+              labelClassName="text-slate-300"
             />
             <Button type="submit" className="w-full" size="lg" disabled={loading || isBlocked}>
               {isBlocked ? `Bloqueado (${blockedFor}s)` : loading ? 'Ingresando...' : 'Iniciar sesión'}
