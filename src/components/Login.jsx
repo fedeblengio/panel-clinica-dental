@@ -76,8 +76,8 @@ export function Login({ onLogin }) {
     <div className="min-h-screen flex">
       {/* Left panel - Branding (hidden on mobile) */}
       <div className="hidden lg:flex lg:w-1/2 xl:w-[55%] relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-sky-500 via-cyan-500 to-teal-500" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.15)_0%,transparent_60%)]" />
+        <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-cyan-900 to-teal-900" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(6,182,212,0.25)_0%,transparent_60%)]" />
 
         {/* Decorative circles */}
         <div className="absolute -top-20 -left-20 w-72 h-72 bg-white/10 rounded-full blur-3xl" />
@@ -98,7 +98,7 @@ export function Login({ onLogin }) {
               <span className="text-2xl font-bold text-white">DentalPanel</span>
             </motion.div>
             <motion.p
-              className="text-white/60 text-sm ml-1"
+              className="text-cyan-300/80 text-sm ml-1"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.3 }}
@@ -115,9 +115,9 @@ export function Login({ onLogin }) {
             >
               <h2 className="text-4xl xl:text-5xl font-bold text-white leading-tight">
                 Tu clínica,<br />
-                <span className="text-white/80">bajo control.</span>
+                <span className="text-cyan-400">bajo control.</span>
               </h2>
-              <p className="text-white/60 mt-4 text-lg max-w-md">
+              <p className="text-white/80 mt-4 text-lg max-w-md">
                 Automatizá la gestión de pacientes, citas y comunicación con WhatsApp. Todo desde un solo lugar.
               </p>
             </motion.div>
@@ -136,17 +136,17 @@ export function Login({ onLogin }) {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.7 + i * 0.1 }}
                 >
-                  <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
-                    <Icon size={16} className="text-white" strokeWidth={1.8} />
+                  <div className="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-400/20 flex items-center justify-center shrink-0">
+                    <Icon size={16} className="text-cyan-300" strokeWidth={1.8} />
                   </div>
-                  <span className="text-white/80 text-sm">{text}</span>
+                  <span className="text-white/90 text-sm">{text}</span>
                 </motion.div>
               ))}
             </motion.div>
           </div>
 
           <motion.p
-            className="text-white/30 text-xs"
+            className="text-white/50 text-xs"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 1.2 }}
