@@ -58,15 +58,14 @@ export function Layout({ children, onLogout, user }) {
             </div>
           </div>
           <div className="border-t pt-3 mt-1">
-            <p className="text-sm font-medium truncate">{sidebarTitle}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {user?.nombre || 'Panel de gestión'}
-            </p>
-            {user?.rol === 'superadmin' && (
-              <span className="inline-flex items-center rounded-full bg-violet-100 text-violet-800 dark:bg-violet-500/20 dark:text-violet-300 px-2.5 py-0.5 text-xs font-medium mt-2">
-                Super Admin
-              </span>
-            )}
+            <p className="text-sm font-medium truncate">{user?.nombre || 'Usuario'}</p>
+            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium mt-1 ${
+              isSuperadmin
+                ? 'bg-violet-100 text-violet-800 dark:bg-violet-500/20 dark:text-violet-300'
+                : 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300'
+            }`}>
+              {isSuperadmin ? 'Super Admin' : 'Administrador'}
+            </span>
           </div>
         </div>
         <nav className="space-y-1">
@@ -180,19 +179,22 @@ export function Layout({ children, onLogout, user }) {
             </motion.div>
           </div>
 
-          {/* Clinic name indicator */}
+          {/* User info indicator */}
           <motion.div
             className="mx-3 mb-4 px-3 py-2 rounded-lg bg-white/5 overflow-hidden"
             animate={{ opacity: expanded ? 1 : 0, height: expanded ? 'auto' : 0, marginBottom: expanded ? 16 : 0 }}
             transition={{ duration: 0.2 }}
           >
-            <div className="flex items-center gap-2">
-              <Activity size={14} className="text-emerald-400 shrink-0" />
-              <span className="text-xs font-medium text-sidebar-foreground/80 truncate">{sidebarTitle}</span>
-            </div>
             {user?.nombre && (
-              <span className="text-xs text-sidebar-foreground/50 mt-0.5 block truncate">{user.nombre}</span>
+              <span className="text-xs font-medium text-sidebar-foreground/80 block truncate">{user.nombre}</span>
             )}
+            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium mt-1 ${
+              isSuperadmin
+                ? 'bg-violet-500/20 text-violet-300'
+                : 'bg-sky-500/20 text-sky-300'
+            }`}>
+              {isSuperadmin ? 'Super Admin' : 'Admin'}
+            </span>
           </motion.div>
 
           <nav className="space-y-1 px-2">
