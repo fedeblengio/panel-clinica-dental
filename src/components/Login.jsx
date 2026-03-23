@@ -73,7 +73,7 @@ export function Login({ onLogin }) {
   const isBlocked = blockedFor > 0;
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex dark">
       {/* Left panel - Branding (hidden on mobile) */}
       <div className="hidden lg:flex lg:w-1/2 xl:w-[55%] relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-cyan-900 to-teal-900" />
@@ -157,7 +157,7 @@ export function Login({ onLogin }) {
       </div>
 
       {/* Right panel - Login form */}
-      <div className="flex-1 flex items-center justify-center bg-slate-200 dark:bg-slate-800/80 px-4 sm:px-8">
+      <div className="flex-1 flex items-center justify-center bg-[#1e293b] px-4 sm:px-8">
         <motion.div
           className="w-full max-w-sm"
           initial={{ opacity: 0, y: 20, scale: 0.95 }}
