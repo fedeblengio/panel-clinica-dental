@@ -13,7 +13,8 @@
     "bcryptjs": "^3.0.3",
     "express": "^4.21.0",
     "express-session": "^1.18.0",
-    "pg": "^8.13.0"
+    "pg": "^8.13.0",
+    "recharts": "^3.8.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
