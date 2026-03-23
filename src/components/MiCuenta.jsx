@@ -20,8 +20,7 @@ export function MiCuenta() {
     fetch('/api/session')
       .then(r => r.json())
       .then(d => { if (d.authenticated) setUser(d); });
-    api('/api/configuracion')
-      .then(r => r.json())
+    api('/configuracion')
       .then(d => setConfig(d))
       .catch(() => {});
   }, []);
@@ -46,19 +45,17 @@ export function MiCuenta() {
 
     setLoading(true);
     try {
-      const res = await api('/api/change-password', {
+      const data = await api('/change-password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ currentPassword, newPassword }),
+        body: { currentPassword, newPassword },
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setPwError(data.error || 'Error al cambiar contraseña');
-      } else {
+      if (data.ok) {
         setPwMsg('Contraseña cambiada correctamente');
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
+      } else {
+        setPwError(data.error || 'Error al cambiar contraseña');
       }
     } catch {
       setPwError('Error de conexión');
@@ -203,11 +200,11 @@ export function MiCuenta() {
                   </div>
                   <div>
                     <span className="text-sm text-muted-foreground">Teléfono</span>
-                    <p className="font-medium">{config.telefono_clinica || '—'}</p>
+                    <p className="font-medium">{config.telefono || '—'}</p>
                   </div>
                   <div>
                     <span className="text-sm text-muted-foreground">Email</span>
-                    <p className="font-medium">{config.email_clinica || '—'}</p>
+                    <p className="font-medium">{config.email || '—'}</p>
                   </div>
                 </div>
               ) : (
