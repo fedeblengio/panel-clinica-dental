@@ -8,6 +8,7 @@ import { Citas } from './components/Citas';
 import { Conversaciones } from './components/Conversaciones';
 import { Configuracion } from './components/Configuracion';
 import { Ayuda } from './components/Ayuda';
+import { MiCuenta } from './components/MiCuenta';
 import { SuperAdmin } from './components/SuperAdmin';
 import { setClinicaId } from './lib/utils';
 
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="/pacientes" element={<Pacientes />} />
           <Route path="/citas" element={<Citas />} />
           <Route path="/conversaciones" element={<Conversaciones />} />
+          <Route path="/mi-cuenta" element={<MiCuenta />} />
           <Route path="/configuracion" element={<Configuracion />} />
           <Route path="/ayuda" element={<Ayuda />} />
           {user?.rol === 'superadmin' && (

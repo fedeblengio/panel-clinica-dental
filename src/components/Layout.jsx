@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Users, CalendarDays, MessageSquare, Settings, HelpCircle, LogOut, Sun, Moon, Menu, X, Shield, Activity } from 'lucide-react';
+import { LayoutDashboard, Users, CalendarDays, MessageSquare, Settings, HelpCircle, LogOut, Sun, Moon, Menu, X, Shield, Activity, User } from 'lucide-react';
 import { useTheme } from '../lib/useTheme';
 
 const sidebarSpring = { type: 'spring', stiffness: 300, damping: 30 };
@@ -27,6 +27,7 @@ export function Layout({ children, onLogout, user }) {
     { to: '/pacientes', icon: Users, label: 'Pacientes' },
     { to: '/citas', icon: CalendarDays, label: 'Citas' },
     { to: '/conversaciones', icon: MessageSquare, label: 'Conversaciones' },
+    { to: '/mi-cuenta', icon: User, label: 'Mi Cuenta' },
     { to: '/configuracion', icon: Settings, label: 'Configuración' },
     { to: '/ayuda', icon: HelpCircle, label: 'Ayuda' },
     ...(user?.rol === 'superadmin' ? [{ to: '/admin', icon: Shield, label: 'Super Admin' }] : []),

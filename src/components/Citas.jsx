@@ -5,13 +5,17 @@ import { Button } from './ui/button';
 import { Input, Select } from './ui/input';
 import { Badge } from './ui/badge';
 import { Dialog } from './ui/dialog';
-import { Plus, Filter, Pencil, Trash2, List, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Filter, Pencil, Trash2, List, CalendarDays, ChevronLeft, ChevronRight, Download, FileSpreadsheet } from 'lucide-react';
 import { api } from '../lib/utils';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 
 const TIPOS = ['Limpieza dental', 'Consulta general', 'Ortodoncia', 'Endodoncia', 'Extracción', 'Blanqueamiento', 'Implante', 'Corona', 'Revisión', 'Urgencia', 'Otro'];
 const ESTADOS = ['Pendiente', 'Confirmada', 'Cancelada', 'Completada', 'Modificada', 'No Asistio'];
 
 const empty = { paciente_telefono: '', fecha_cita: '', hora_cita: '', tipo_cita: '', estado: 'Pendiente', notas: '' };
+const PAGE_SIZE = 10;
 
 function formatDate(d) {
   if (!d) return '';
@@ -138,6 +142,7 @@ export function Citas() {
   const [editing, setEditing] = useState(null);
   const [error, setError] = useState('');
   const [view, setView] = useState('list'); // 'list' | 'calendar'
+  const [page, setPage] = useState(1);
 
   const load = () => {
     const params = new URLSearchParams();
@@ -147,7 +152,7 @@ export function Citas() {
   };
 
   useEffect(() => { load(); api('/pacientes').then(setPacientes).catch(() => {}); }, []);
-  useEffect(() => { load(); }, [fecha, estado]);
+  useEffect(() => { setPage(1); load(); }, [fecha, estado]);
 
   const openNew = () => { setForm(empty); setEditing(null); setError(''); setDialog(true); };
   const openEdit = (c) => {
@@ -182,6 +187,44 @@ export function Citas() {
     setConfirm(null);
     load();
   };
+
+  const exportPDF = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(16);
+    doc.text('Citas', 14, 20);
+    autoTable(doc, {
+      startY: 30,
+      head: [['Fecha', 'Hora', 'Paciente', 'Tipo', 'Estado']],
+      body: citas.map(c => [
+        formatDate(c.fecha_cita),
+        String(c.hora_cita).substring(0, 5),
+        c.paciente_nombre || '',
+        c.tipo_cita || '',
+        c.estado || '',
+      ]),
+    });
+    doc.save('citas.pdf');
+  };
+
+  const exportExcel = () => {
+    const data = citas.map(c => ({
+      Fecha: formatDate(c.fecha_cita),
+      Hora: String(c.hora_cita).substring(0, 5),
+      Paciente: c.paciente_nombre || '',
+      Tipo: c.tipo_cita || '',
+      Estado: c.estado || '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Citas');
+    XLSX.writeFile(wb, 'citas.xlsx');
+  };
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(citas.length / PAGE_SIZE));
+  const paginatedCitas = citas.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const startIdx = (page - 1) * PAGE_SIZE + 1;
+  const endIdx = Math.min(page * PAGE_SIZE, citas.length);
 
   return (
     <div>
@@ -242,6 +285,13 @@ export function Citas() {
               {(fecha || estado) && (
                 <Button variant="ghost" size="sm" onClick={() => { setFecha(''); setEstado(''); }}>Limpiar</Button>
               )}
+              <div className="flex-1" />
+              <Button type="button" variant="outline" size="sm" onClick={exportPDF}>
+                <Download size={16} /> Exportar PDF
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={exportExcel}>
+                <FileSpreadsheet size={16} /> Exportar Excel
+              </Button>
             </div>
           </div>
           <CardContent>
@@ -259,7 +309,7 @@ export function Citas() {
                     </tr>
                   </thead>
                   <tbody>
-                    {citas.map((c, i) => (
+                    {paginatedCitas.map((c, i) => (
                       <motion.tr key={c.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.03 }} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                         <td className="py-4">{formatDate(c.fecha_cita)}</td>
                         <td className="py-4 font-semibold tabular-nums">{String(c.hora_cita).substring(0, 5)}</td>
@@ -282,11 +332,32 @@ export function Citas() {
                 </table>
               </div>
             ) : (
-              <p className="text-muted-foreground text-center py-12">
-                {fecha || estado ? 'No se encontraron citas con esos filtros' : 'No hay citas registradas'}
-              </p>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="flex flex-col items-center justify-center py-12">
+                <CalendarDays size={36} className="text-muted-foreground mb-3" />
+                <p className="text-muted-foreground text-center">
+                  {fecha || estado ? 'No se encontraron citas con esos filtros' : 'No hay citas registradas'}
+                </p>
+              </motion.div>
             )}
           </CardContent>
+          {citas.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between px-6 py-4 border-t">
+              <p className="text-sm text-muted-foreground">
+                Mostrando {startIdx}-{endIdx} de {citas.length}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+                  Anterior
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Página {page} de {totalPages}
+                </span>
+                <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
+                  Siguiente
+                </Button>
+              </div>
+            </div>
+          )}
         </Card>
         </motion.div>
       )}

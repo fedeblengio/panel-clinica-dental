@@ -125,7 +125,10 @@ export function Conversaciones() {
                   ))}
                 </div>
               ) : (
-                <p className="text-muted-foreground text-center py-12">No hay conversaciones registradas</p>
+                <div className="flex flex-col items-center justify-center py-12">
+                  <MessageSquare size={36} className="text-muted-foreground mb-3" />
+                  <p className="text-muted-foreground text-center">No hay conversaciones registradas</p>
+                </div>
               )}
             </CardContent>
           </Card>
