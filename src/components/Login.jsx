@@ -157,7 +157,7 @@ export function Login({ onLogin }) {
       </div>
 
       {/* Right panel - Login form */}
-      <div className="flex-1 flex items-center justify-center bg-[#1e293b] px-4 sm:px-8">
+      <div className="flex-1 flex items-center justify-center bg-[hsl(210,20%,7%)] px-4 sm:px-8">
         <motion.div
           className="w-full max-w-sm"
           initial={{ opacity: 0, y: 20, scale: 0.95 }}
