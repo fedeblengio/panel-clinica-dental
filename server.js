@@ -279,6 +279,7 @@ app.get('/api/session', (req, res) => {
       nombre: req.session.nombre,
       rol: req.session.rol,
       clinicaId: req.session.clinicaId,
+      clinicaNombre: req.session.clinicaNombre || null,
       clinicaActiva: req.session.clinicaActiva,
     });
   }
@@ -299,7 +300,7 @@ app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   try {
     const result = await pool.query(
-      'SELECT id, username, password_hash, nombre, rol, clinica_id FROM usuarios WHERE username = $1 AND activo = true',
+      'SELECT u.id, u.username, u.password_hash, u.nombre, u.rol, u.clinica_id, c.nombre as clinica_nombre FROM usuarios u LEFT JOIN clinicas c ON u.clinica_id = c.id WHERE u.username = $1 AND u.activo = true',
       [username]
     );
     const user = result.rows[0];
@@ -312,6 +313,7 @@ app.post('/api/login', async (req, res) => {
       req.session.nombre = user.nombre;
       req.session.rol = user.rol;
       req.session.clinicaId = user.clinica_id;
+      req.session.clinicaNombre = user.clinica_nombre || null;
       // If superadmin, auto-select first clinic
       if (user.rol === 'superadmin' && !user.clinica_id) {
         const firstClinic = await pool.query('SELECT id FROM clinicas WHERE activa = true ORDER BY id LIMIT 1');

@@ -38,8 +38,11 @@ export function Layout({ children, onLogout, user }) {
     navigate('/login');
   };
 
-  const clinicName = user?.clinica_nombre || 'Clínica Dental';
-  const panelTitle = user?.rol === 'superadmin' ? 'Panel Admin' : clinicName;
+  const clinicName = user?.clinicaNombre || 'Clínica Dental';
+  const isSuperadmin = user?.rol === 'superadmin';
+  const brandName = 'DentalPanel';
+  const sidebarTitle = isSuperadmin ? brandName : clinicName;
+  const sidebarSubtitle = isSuperadmin ? 'Gestión clínica' : 'Panel de gestión';
 
   const mobileContent = (
     <>
@@ -50,12 +53,12 @@ export function Layout({ children, onLogout, user }) {
               <DentalLogo size={22} className="text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold tracking-tight">DentalPanel</h1>
-              <p className="text-xs text-muted-foreground">Gestión clínica</p>
+              <h1 className="text-lg font-bold tracking-tight">{sidebarTitle}</h1>
+              <p className="text-xs text-muted-foreground">{sidebarSubtitle}</p>
             </div>
           </div>
           <div className="border-t pt-3 mt-1">
-            <p className="text-sm font-medium truncate">{panelTitle}</p>
+            <p className="text-sm font-medium truncate">{sidebarTitle}</p>
             <p className="text-xs text-muted-foreground mt-0.5">
               {user?.nombre || 'Panel de gestión'}
             </p>
@@ -172,8 +175,8 @@ export function Layout({ children, onLogout, user }) {
               animate={{ opacity: expanded ? 1 : 0 }}
               transition={{ duration: 0.2 }}
             >
-              <span className="text-base font-bold tracking-tight block text-white">DentalPanel</span>
-              <span className="text-xs text-sidebar-foreground/60 block">Gestión clínica</span>
+              <span className="text-base font-bold tracking-tight block text-white">{sidebarTitle}</span>
+              <span className="text-xs text-sidebar-foreground/60 block">{sidebarSubtitle}</span>
             </motion.div>
           </div>
 
@@ -185,7 +188,7 @@ export function Layout({ children, onLogout, user }) {
           >
             <div className="flex items-center gap-2">
               <Activity size={14} className="text-emerald-400 shrink-0" />
-              <span className="text-xs font-medium text-sidebar-foreground/80 truncate">{panelTitle}</span>
+              <span className="text-xs font-medium text-sidebar-foreground/80 truncate">{sidebarTitle}</span>
             </div>
             {user?.nombre && (
               <span className="text-xs text-sidebar-foreground/50 mt-0.5 block truncate">{user.nombre}</span>
