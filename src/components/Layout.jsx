@@ -257,7 +257,11 @@ export function Layout({ children, onLogout, user }) {
         </div>
       </motion.aside>
 
-      <main className="flex-1 overflow-auto pt-14 md:pt-0 md:ml-16">
+      <motion.main
+        className="flex-1 overflow-auto pt-14 md:pt-0"
+        animate={{ marginLeft: typeof window !== 'undefined' && window.innerWidth >= 768 ? (expanded ? 256 : 64) : 0 }}
+        transition={sidebarSpring}
+      >
         <div className="p-4 sm:p-6 lg:p-8">
           <AnimatePresence mode="wait">
             <motion.div
@@ -271,7 +275,7 @@ export function Layout({ children, onLogout, user }) {
             </motion.div>
           </AnimatePresence>
         </div>
-      </main>
+      </motion.main>
     </div>
   );
 }
