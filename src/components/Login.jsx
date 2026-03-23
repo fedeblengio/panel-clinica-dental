@@ -217,7 +217,7 @@ export function Login({ onLogin }) {
               required
               autoFocus
               disabled={isBlocked}
-              className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400"
+              className="bg-[hsl(210,20%,7%)] border-slate-600 text-white placeholder:text-slate-400"
               labelClassName="text-slate-300"
             />
             <Input
@@ -228,7 +228,7 @@ export function Login({ onLogin }) {
               placeholder="Ingresá tu contraseña"
               required
               disabled={isBlocked}
-              className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400"
+              className="bg-[hsl(210,20%,7%)] border-slate-600 text-white placeholder:text-slate-400"
               labelClassName="text-slate-300"
             />
             <Button type="submit" className="w-full" size="lg" disabled={loading || isBlocked}>
