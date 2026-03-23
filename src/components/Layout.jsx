@@ -1,10 +1,19 @@
 import { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Users, CalendarDays, MessageSquare, Settings, HelpCircle, LogOut, Sun, Moon, Menu, X, Shield } from 'lucide-react';
+import { LayoutDashboard, Users, CalendarDays, MessageSquare, Settings, HelpCircle, LogOut, Sun, Moon, Menu, X, Shield, Activity } from 'lucide-react';
 import { useTheme } from '../lib/useTheme';
 
 const sidebarSpring = { type: 'spring', stiffness: 300, damping: 30 };
+
+// Tooth/dental SVG icon for branding
+function DentalLogo({ size = 28, className = '' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" className={className} xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 2C9.5 2 7.5 3.5 6.5 5C5.5 6.5 5 8 5 10C5 12 5.5 13.5 6 15C6.5 16.5 7 18 7.5 19.5C8 21 8.5 22 9.5 22C10.5 22 11 21 11.5 19.5C12 18 12 18 12 18C12 18 12 18 12.5 19.5C13 21 13.5 22 14.5 22C15.5 22 16 21 16.5 19.5C17 18 17.5 16.5 18 15C18.5 13.5 19 12 19 10C19 8 18.5 6.5 17.5 5C16.5 3.5 14.5 2 12 2Z" fill="currentColor" opacity="0.9"/>
+    </svg>
+  );
+}
 
 export function Layout({ children, onLogout, user }) {
   const navigate = useNavigate();
@@ -29,21 +38,33 @@ export function Layout({ children, onLogout, user }) {
     navigate('/login');
   };
 
-  const panelTitle = user?.rol === 'superadmin' ? 'Panel Admin' : 'Clínica Dental';
+  const clinicName = user?.clinica_nombre || 'Clínica Dental';
+  const panelTitle = user?.rol === 'superadmin' ? 'Panel Admin' : clinicName;
 
   const mobileContent = (
     <>
       <div>
-        <div className="px-4 mb-8">
-          <h1 className="text-xl font-bold tracking-tight">{panelTitle}</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {user?.nombre || 'Panel de gestión'}
-          </p>
-          {user?.rol === 'superadmin' && (
-            <span className="inline-flex items-center rounded-full bg-violet-100 text-violet-800 dark:bg-violet-500/20 dark:text-violet-300 px-2.5 py-0.5 text-xs font-medium mt-2">
-              Super Admin
-            </span>
-          )}
+        <div className="px-4 mb-6">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-sidebar-accent flex items-center justify-center">
+              <DentalLogo size={22} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg font-bold tracking-tight">DentalPanel</h1>
+              <p className="text-xs text-muted-foreground">Gestión clínica</p>
+            </div>
+          </div>
+          <div className="border-t pt-3 mt-1">
+            <p className="text-sm font-medium truncate">{panelTitle}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {user?.nombre || 'Panel de gestión'}
+            </p>
+            {user?.rol === 'superadmin' && (
+              <span className="inline-flex items-center rounded-full bg-violet-100 text-violet-800 dark:bg-violet-500/20 dark:text-violet-300 px-2.5 py-0.5 text-xs font-medium mt-2">
+                Super Admin
+              </span>
+            )}
+          </div>
         </div>
         <nav className="space-y-1">
           {links.map(({ to, icon: Icon, label }) => (
@@ -94,7 +115,10 @@ export function Layout({ children, onLogout, user }) {
         <button onClick={() => setOpen(true)} className="p-2 -ml-2 rounded-lg hover:bg-accent transition-colors">
           <Menu size={22} strokeWidth={1.8} />
         </button>
-        <span className="font-semibold">{currentLabel}</span>
+        <div className="flex items-center gap-2">
+          <DentalLogo size={18} className="text-primary" />
+          <span className="font-semibold">{currentLabel}</span>
+        </div>
         <div className="w-10" />
       </header>
 
@@ -129,31 +153,44 @@ export function Layout({ children, onLogout, user }) {
         )}
       </AnimatePresence>
 
-      {/* Desktop sidebar - collapsed, expands on hover */}
+      {/* Desktop sidebar - dark themed, expands on hover */}
       <motion.aside
-        className="hidden md:flex border-r bg-card flex-col justify-between py-6 fixed inset-y-0 left-0 z-30 overflow-hidden"
+        className="hidden md:flex bg-sidebar text-sidebar-foreground flex-col justify-between py-6 fixed inset-y-0 left-0 z-30 overflow-hidden"
         animate={{ width: expanded ? 256 : 64 }}
         transition={sidebarSpring}
         onMouseEnter={() => setExpanded(true)}
         onMouseLeave={() => setExpanded(false)}
       >
         <div>
-          {/* Logo icon / expanded title */}
+          {/* Logo + branding */}
           <div className="flex items-center h-12 mb-6 px-4">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-              <LayoutDashboard size={18} className="text-primary" />
+            <div className="w-8 h-8 rounded-lg bg-sidebar-accent flex items-center justify-center shrink-0">
+              <DentalLogo size={20} className="text-white" />
             </div>
             <motion.div
               className="ml-3 whitespace-nowrap overflow-hidden"
               animate={{ opacity: expanded ? 1 : 0 }}
               transition={{ duration: 0.2 }}
             >
-              <span className="text-lg font-bold tracking-tight block">{panelTitle}</span>
-              {user?.nombre && (
-                <span className="text-xs text-muted-foreground block">{user.nombre}</span>
-              )}
+              <span className="text-base font-bold tracking-tight block text-white">DentalPanel</span>
+              <span className="text-xs text-sidebar-foreground/60 block">Gestión clínica</span>
             </motion.div>
           </div>
+
+          {/* Clinic name indicator */}
+          <motion.div
+            className="mx-3 mb-4 px-3 py-2 rounded-lg bg-white/5 overflow-hidden"
+            animate={{ opacity: expanded ? 1 : 0, height: expanded ? 'auto' : 0, marginBottom: expanded ? 16 : 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <div className="flex items-center gap-2">
+              <Activity size={14} className="text-emerald-400 shrink-0" />
+              <span className="text-xs font-medium text-sidebar-foreground/80 truncate">{panelTitle}</span>
+            </div>
+            {user?.nombre && (
+              <span className="text-xs text-sidebar-foreground/50 mt-0.5 block truncate">{user.nombre}</span>
+            )}
+          </motion.div>
 
           <nav className="space-y-1 px-2">
             {links.map(({ to, icon: Icon, label }) => (
@@ -164,8 +201,8 @@ export function Layout({ children, onLogout, user }) {
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-3 rounded-lg font-medium transition-all duration-200 whitespace-nowrap ${
                     isActive
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                      ? 'bg-sidebar-accent text-white'
+                      : 'text-sidebar-foreground/70 hover:bg-white/10 hover:text-white'
                   }`
                 }
               >
@@ -185,7 +222,7 @@ export function Layout({ children, onLogout, user }) {
         <div className="space-y-1 px-2">
           <button
             onClick={toggle}
-            className="flex items-center gap-3 px-3 py-3 rounded-lg font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-all duration-200 w-full whitespace-nowrap"
+            className="flex items-center gap-3 px-3 py-3 rounded-lg font-medium text-sidebar-foreground/70 hover:bg-white/10 hover:text-white transition-all duration-200 w-full whitespace-nowrap"
           >
             {dark ? <Sun size={20} strokeWidth={1.8} className="shrink-0" /> : <Moon size={20} strokeWidth={1.8} className="shrink-0" />}
             <motion.span
@@ -198,7 +235,7 @@ export function Layout({ children, onLogout, user }) {
           </button>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 px-3 py-3 rounded-lg font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-all duration-200 w-full whitespace-nowrap"
+            className="flex items-center gap-3 px-3 py-3 rounded-lg font-medium text-sidebar-foreground/70 hover:bg-white/10 hover:text-white transition-all duration-200 w-full whitespace-nowrap"
           >
             <LogOut size={20} strokeWidth={1.8} className="shrink-0" />
             <motion.span
