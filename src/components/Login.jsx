@@ -170,13 +170,13 @@ export function Login({ onLogin }) {
               <DentalLogo size={30} className="text-white" />
             </div>
             <h1 className="text-2xl font-bold tracking-tight text-white">DentalPanel</h1>
-            <p className="text-slate-400 text-sm mt-1">Gestión inteligente para tu clínica</p>
+            <p className="text-neutral-400 text-sm mt-1">Gestión inteligente para tu clínica</p>
           </div>
 
           {/* Desktop heading */}
           <div className="hidden lg:block text-left mb-8">
             <h1 className="text-2xl font-bold tracking-tight text-white">Bienvenido</h1>
-            <p className="text-slate-400 mt-1">Ingresá tus credenciales para continuar</p>
+            <p className="text-neutral-400 mt-1">Ingresá tus credenciales para continuar</p>
           </div>
 
           <motion.form
@@ -217,7 +217,7 @@ export function Login({ onLogin }) {
               required
               autoFocus
               disabled={isBlocked}
-              className="bg-[hsl(210,20%,7%)] border-slate-600 text-white placeholder:text-slate-400"
+              className="bg-[hsl(210,20%,7%)] border-slate-600 text-white placeholder:text-neutral-400"
               labelClassName="text-slate-300"
             />
             <Input
@@ -228,7 +228,7 @@ export function Login({ onLogin }) {
               placeholder="Ingresá tu contraseña"
               required
               disabled={isBlocked}
-              className="bg-[hsl(210,20%,7%)] border-slate-600 text-white placeholder:text-slate-400"
+              className="bg-[hsl(210,20%,7%)] border-slate-600 text-white placeholder:text-neutral-400"
               labelClassName="text-slate-300"
             />
             <Button type="submit" className="w-full" size="lg" disabled={loading || isBlocked}>
