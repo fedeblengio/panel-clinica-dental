@@ -193,6 +193,8 @@ async function initDB() {
     await pool.query(`ALTER TABLE citas ADD COLUMN IF NOT EXISTS clinica_id INTEGER REFERENCES clinicas(id)`).catch(() => {});
     await pool.query(`ALTER TABLE n8n_chat_histories ADD COLUMN IF NOT EXISTS clinica_id INTEGER REFERENCES clinicas(id)`).catch(() => {});
     await pool.query(`ALTER TABLE configuracion_clinica ADD COLUMN IF NOT EXISTS prompt_sistema TEXT DEFAULT ''`).catch(() => {});
+    await pool.query(`ALTER TABLE citas ADD COLUMN IF NOT EXISTS recordatorio_24h BOOLEAN DEFAULT false`).catch(() => {});
+    await pool.query(`ALTER TABLE citas ADD COLUMN IF NOT EXISTS recordatorio_1h BOOLEAN DEFAULT false`).catch(() => {});
 
     // DB trigger: auto-assign clinica_id to new chat messages based on patient's clinica
     await pool.query(`
@@ -378,8 +380,16 @@ app.get('/api/dashboard', requireAuth, requireClinica, async (req, res) => {
 
 // --- DASHBOARD METRICS ---
 app.get('/api/metricas', requireAuth, requireClinica, async (req, res) => {
+  const cid = req.clinicaId;
+  const defaults = {
+    citasPorMes: [], pacientesNuevos: [], citasSemana: [],
+    resumen: { total_citas: 0, completadas: 0, canceladas: 0, no_show: 0 },
+    recordatorios: { enviados_24h: 0, enviados_1h: 0 },
+  };
+
+  const result = { ...defaults };
+
   try {
-    const cid = req.clinicaId;
     const citasPorMes = await pool.query(`
       SELECT TO_CHAR(fecha_cita, 'YYYY-MM') as mes, COUNT(*) as total,
         COUNT(*) FILTER (WHERE estado = 'Completada') as completadas,
@@ -388,13 +398,19 @@ app.get('/api/metricas', requireAuth, requireClinica, async (req, res) => {
       FROM citas WHERE fecha_cita >= CURRENT_DATE - INTERVAL '6 months' AND clinica_id = $1
       GROUP BY TO_CHAR(fecha_cita, 'YYYY-MM') ORDER BY mes
     `, [cid]);
+    result.citasPorMes = citasPorMes.rows;
+  } catch (err) { console.error('Metricas citasPorMes error:', err.message); }
 
+  try {
     const pacientesNuevos = await pool.query(`
       SELECT TO_CHAR(created_at, 'YYYY-MM') as mes, COUNT(*) as total
       FROM pacientes WHERE created_at >= CURRENT_DATE - INTERVAL '6 months' AND clinica_id = $1
       GROUP BY TO_CHAR(created_at, 'YYYY-MM') ORDER BY mes
     `, [cid]);
+    result.pacientesNuevos = pacientesNuevos.rows;
+  } catch (err) { console.error('Metricas pacientesNuevos error:', err.message); }
 
+  try {
     const resumen = await pool.query(`
       SELECT COUNT(*) as total_citas,
         COUNT(*) FILTER (WHERE estado = 'Completada') as completadas,
@@ -402,13 +418,19 @@ app.get('/api/metricas', requireAuth, requireClinica, async (req, res) => {
         COUNT(*) FILTER (WHERE estado = 'No Asistio') as no_show
       FROM citas WHERE fecha_cita >= CURRENT_DATE - INTERVAL '30 days' AND clinica_id = $1
     `, [cid]);
+    result.resumen = resumen.rows[0] || defaults.resumen;
+  } catch (err) { console.error('Metricas resumen error:', err.message); }
 
+  try {
     const recordatorios = await pool.query(`
       SELECT COUNT(*) FILTER (WHERE recordatorio_24h = true) as enviados_24h,
         COUNT(*) FILTER (WHERE recordatorio_1h = true) as enviados_1h
       FROM citas WHERE fecha_cita >= CURRENT_DATE - INTERVAL '30 days' AND clinica_id = $1
     `, [cid]);
+    result.recordatorios = recordatorios.rows[0] || defaults.recordatorios;
+  } catch (err) { console.error('Metricas recordatorios error:', err.message); }
 
+  try {
     const citasSemana = await pool.query(`
       SELECT TO_CHAR(fecha_cita, 'Dy') as dia, fecha_cita::text as fecha, COUNT(*) as total
       FROM citas WHERE fecha_cita >= date_trunc('week', CURRENT_DATE)
@@ -416,22 +438,10 @@ app.get('/api/metricas', requireAuth, requireClinica, async (req, res) => {
         AND clinica_id = $1
       GROUP BY fecha_cita, TO_CHAR(fecha_cita, 'Dy') ORDER BY fecha_cita
     `, [cid]);
+    result.citasSemana = citasSemana.rows;
+  } catch (err) { console.error('Metricas citasSemana error:', err.message); }
 
-    res.json({
-      citasPorMes: citasPorMes.rows,
-      pacientesNuevos: pacientesNuevos.rows,
-      resumen: resumen.rows[0] || { total_citas: 0, completadas: 0, canceladas: 0, no_show: 0 },
-      recordatorios: recordatorios.rows[0] || { enviados_24h: 0, enviados_1h: 0 },
-      citasSemana: citasSemana.rows,
-    });
-  } catch (err) {
-    console.error('Metricas error:', err);
-    res.json({
-      citasPorMes: [], pacientesNuevos: [], citasSemana: [],
-      resumen: { total_citas: 0, completadas: 0, canceladas: 0, no_show: 0 },
-      recordatorios: { enviados_24h: 0, enviados_1h: 0 },
-    });
-  }
+  res.json(result);
 });
 
 // --- AUTO MARCAR NO ASISTIO ---
