@@ -88,10 +88,6 @@ export function MiCuenta() {
                 </div>
                 <div className="space-y-3">
                   <div>
-                    <span className="text-sm text-muted-foreground">Usuario</span>
-                    <p className="font-medium">{user?.username || '—'}</p>
-                  </div>
-                  <div>
                     <span className="text-sm text-muted-foreground">Nombre</span>
                     <p className="font-medium">{user?.nombre || '—'}</p>
                   </div>
