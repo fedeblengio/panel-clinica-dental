@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
-import { Users, CalendarDays, Clock, TrendingUp, Bell, XCircle, CheckCircle2 } from 'lucide-react';
+import { Users, CalendarDays, Clock, TrendingUp, Bell, XCircle, CheckCircle2, Wifi, WifiOff, MessageCircle } from 'lucide-react';
 import { api } from '../lib/utils';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
+import { Onboarding } from './Onboarding';
 
 function AnimatedNumber({ value }) {
   const num = typeof value === 'string' ? parseInt(value) : value;
@@ -101,13 +102,67 @@ function CustomTooltip({ active, payload, label }) {
   );
 }
 
+function WhatsAppStatus() {
+  const [ws, setWs] = useState(null);
+  useEffect(() => {
+    api('/whatsapp-status').then(setWs).catch(() => {});
+  }, []);
+
+  if (!ws) return null;
+
+  const connected = ws.status === 'open';
+  const statusLabel = connected ? 'Conectado' : ws.status === 'close' ? 'Desconectado' : ws.status === 'not_found' ? 'No configurado' : 'Sin conexión';
+  const statusColor = connected
+    ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30'
+    : 'bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30';
+  const iconColor = connected ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400';
+  const StatusIcon = connected ? Wifi : WifiOff;
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }}>
+      <Card className={`border ${statusColor}`}>
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${connected ? 'bg-emerald-100 dark:bg-emerald-500/20' : 'bg-red-100 dark:bg-red-500/20'}`}>
+                <MessageCircle size={20} className={iconColor} strokeWidth={1.8} />
+              </div>
+              <div>
+                <p className="text-sm font-medium">WhatsApp Bot</p>
+                <p className="text-xs text-muted-foreground">{ws.instance_name || 'Instancia'}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <StatusIcon size={16} className={iconColor} />
+              <span className={`text-sm font-medium ${iconColor}`}>{statusLabel}</span>
+              <span className={`w-2.5 h-2.5 rounded-full ${connected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+            </div>
+          </div>
+          {ws.whatsapp_number && (
+            <p className="text-xs text-muted-foreground mt-2">Número: +{ws.whatsapp_number} {ws.profile_name ? `(${ws.profile_name})` : ''}</p>
+          )}
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
 export function Dashboard() {
   const [data, setData] = useState({ totalPacientes: 0, citasHoy: [], proximasCitas: [] });
   const [metricas, setMetricas] = useState(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [configChecked, setConfigChecked] = useState(false);
 
   useEffect(() => {
     api('/dashboard').then(setData).catch(console.error);
     api('/metricas').then(setMetricas).catch(console.error);
+    // Check if config is empty (needs onboarding)
+    api('/configuracion').then(cfg => {
+      if (!cfg.nombre_clinica || cfg.nombre_clinica === 'Mi Clínica Dental') {
+        setShowOnboarding(true);
+      }
+      setConfigChecked(true);
+    }).catch(() => setConfigChecked(true));
   }, []);
 
   const r = metricas?.resumen || {};
@@ -132,6 +187,10 @@ export function Dashboard() {
     { name: 'Otras', value: Math.max(0, totalMes - completadas - canceladas - noShow) },
   ].filter(d => d.value > 0);
 
+  if (showOnboarding && configChecked) {
+    return <Onboarding onComplete={() => setShowOnboarding(false)} />;
+  }
+
   return (
     <div>
       <div className="mb-6 sm:mb-10">
@@ -145,6 +204,11 @@ export function Dashboard() {
         <StatCard icon={CalendarDays} value={data.citasHoy.length} label="Citas hoy" index={1} />
         <StatCard icon={Bell} value={totalRecordatorios} label="Recordatorios enviados" detail="Últimos 30 días" index={2} />
         <StatCard icon={TrendingUp} value={`${100 - tasaNoShow}%`} label="Tasa de asistencia" detail="Últimos 30 días" index={3} />
+      </div>
+
+      {/* WhatsApp status */}
+      <div className="mb-6 sm:mb-10">
+        <WhatsAppStatus />
       </div>
 
       {/* Charts row */}

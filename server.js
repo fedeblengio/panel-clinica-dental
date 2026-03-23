@@ -464,6 +464,87 @@ app.get('/api/metricas', requireAuth, requireClinica, async (req, res) => {
   res.json(result);
 });
 
+// --- NOTIFICACIONES (recent events) ---
+app.get('/api/notificaciones', requireAuth, requireClinica, async (req, res) => {
+  try {
+    const cid = req.clinicaId;
+    const items = [];
+
+    // New patients in last 7 days
+    const newPatients = await pool.query(
+      `SELECT nombre, telefono, created_at FROM pacientes
+       WHERE clinica_id = $1 AND created_at >= CURRENT_DATE - INTERVAL '7 days'
+       ORDER BY created_at DESC LIMIT 10`, [cid]
+    );
+    newPatients.rows.forEach(p => {
+      items.push({ tipo: 'paciente', mensaje: `Nuevo paciente: ${p.nombre}`, fecha: p.created_at });
+    });
+
+    // New appointments in last 7 days
+    const newCitas = await pool.query(
+      `SELECT paciente_nombre, fecha_cita, hora_cita, created_at FROM citas
+       WHERE clinica_id = $1 AND created_at >= CURRENT_DATE - INTERVAL '7 days'
+       ORDER BY created_at DESC LIMIT 10`, [cid]
+    );
+    newCitas.rows.forEach(c => {
+      items.push({ tipo: 'cita', mensaje: `Nueva cita: ${c.paciente_nombre} - ${String(c.fecha_cita).split('T')[0]}`, fecha: c.created_at });
+    });
+
+    // Cancelled appointments in last 7 days
+    const cancelled = await pool.query(
+      `SELECT paciente_nombre, fecha_cita FROM citas
+       WHERE clinica_id = $1 AND estado = 'Cancelada' AND fecha_cita >= CURRENT_DATE - INTERVAL '7 days'
+       ORDER BY fecha_cita DESC LIMIT 5`, [cid]
+    );
+    cancelled.rows.forEach(c => {
+      items.push({ tipo: 'cancelacion', mensaje: `Cita cancelada: ${c.paciente_nombre}`, fecha: c.fecha_cita });
+    });
+
+    // Sort by date descending
+    items.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    res.json(items.slice(0, 20));
+  } catch (err) {
+    console.error('Notificaciones error:', err);
+    res.json([]);
+  }
+});
+
+// --- WHATSAPP STATUS (for regular admins) ---
+app.get('/api/whatsapp-status', requireAuth, requireClinica, async (req, res) => {
+  try {
+    const cid = req.clinicaId;
+    const clinica = await pool.query('SELECT instance_name, nombre FROM clinicas WHERE id = $1', [cid]);
+    if (!clinica.rows[0]) return res.json({ status: 'not_found' });
+
+    const instanceName = clinica.rows[0].instance_name;
+    if (!EVOLUTION_API_KEY) {
+      return res.json({ status: 'no_api_key', instance_name: instanceName });
+    }
+
+    let instances = null;
+    try {
+      instances = await evolutionFetch('/instance/fetchInstances');
+    } catch (e) {
+      return res.json({ status: 'api_error', instance_name: instanceName });
+    }
+
+    const instance = Array.isArray(instances) ? instances.find(i => i.name === instanceName) : null;
+    if (!instance) {
+      return res.json({ status: 'not_found', instance_name: instanceName });
+    }
+
+    res.json({
+      status: instance.connectionStatus || 'unknown',
+      instance_name: instanceName,
+      whatsapp_number: instance.ownerJid?.replace('@s.whatsapp.net', '') || null,
+      profile_name: instance.profileName || null,
+    });
+  } catch (err) {
+    console.error('WhatsApp status error:', err);
+    res.json({ status: 'error' });
+  }
+});
+
 // --- AUTO MARCAR NO ASISTIO ---
 app.post('/api/citas/auto-no-asistio', requireAuth, async (req, res) => {
   try {

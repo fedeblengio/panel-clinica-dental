@@ -3,6 +3,7 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LayoutDashboard, Users, CalendarDays, MessageSquare, Settings, HelpCircle, LogOut, Sun, Moon, Menu, X, Shield, Activity, User } from 'lucide-react';
 import { useTheme } from '../lib/useTheme';
+import { NotificacionesBell } from './Notificaciones';
 
 const sidebarSpring = { type: 'spring', stiffness: 300, damping: 30 };
 
@@ -226,6 +227,7 @@ export function Layout({ children, onLogout, user }) {
         </div>
 
         <div className="space-y-1 px-2">
+          <NotificacionesBell collapsed={!expanded} />
           <button
             onClick={toggle}
             className="flex items-center gap-3 px-3 py-3 rounded-lg font-medium text-sidebar-foreground/70 hover:bg-white/10 hover:text-white transition-all duration-200 w-full whitespace-nowrap"
