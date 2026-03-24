@@ -4,37 +4,55 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Shield, Clock, Wifi, CalendarDays, Users, MessageSquare, Sparkles } from 'lucide-react';
 
-/* ─── Particle Canvas ─── */
-function ParticleCanvas() {
+/* ─── Dental Canvas: Burbujas + Destellos de sonrisa ─── */
+function DentalCanvas() {
   const canvasRef = useRef(null);
   const mouseRef = useRef({ x: -1000, y: -1000 });
-  const particlesRef = useRef([]);
+  const bubblesRef = useRef([]);
+  const sparklesRef = useRef([]);
   const animFrameRef = useRef(null);
 
-  const initParticles = useCallback((width, height) => {
-    const count = Math.min(80, Math.floor((width * height) / 12000));
-    return Array.from({ length: count }, () => ({
+  const initElements = useCallback((width, height) => {
+    // Burbujas suaves - frescura/higiene
+    const bubbleCount = Math.min(40, Math.floor((width * height) / 25000));
+    const bubbles = Array.from({ length: bubbleCount }, () => ({
       x: Math.random() * width,
       y: Math.random() * height,
-      vx: (Math.random() - 0.5) * 0.4,
-      vy: (Math.random() - 0.5) * 0.4,
-      radius: Math.random() * 2 + 0.5,
-      opacity: Math.random() * 0.5 + 0.2,
-      pulse: Math.random() * Math.PI * 2,
+      vy: -(Math.random() * 0.3 + 0.1), // flotan hacia arriba
+      vx: (Math.random() - 0.5) * 0.15,
+      radius: Math.random() * 18 + 6,
+      opacity: Math.random() * 0.12 + 0.03,
+      wobble: Math.random() * Math.PI * 2,
+      wobbleSpeed: Math.random() * 0.008 + 0.003,
+      wobbleAmp: Math.random() * 15 + 5,
     }));
+
+    // Destellos tipo "brillo de sonrisa"
+    const sparkleCount = Math.min(15, Math.floor((width * height) / 60000));
+    const sparkles = Array.from({ length: sparkleCount }, () => ({
+      x: Math.random() * width,
+      y: Math.random() * height,
+      life: Math.random() * Math.PI * 2,
+      lifeSpeed: Math.random() * 0.03 + 0.01,
+      size: Math.random() * 3 + 1.5,
+      maxOpacity: Math.random() * 0.6 + 0.2,
+    }));
+
+    return { bubbles, sparkles };
   }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    let w, h;
 
     const resize = () => {
-      w = canvas.width = canvas.offsetWidth * window.devicePixelRatio;
-      h = canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+      canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+      canvas.height = canvas.offsetHeight * window.devicePixelRatio;
       ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-      particlesRef.current = initParticles(canvas.offsetWidth, canvas.offsetHeight);
+      const { bubbles, sparkles } = initElements(canvas.offsetWidth, canvas.offsetHeight);
+      bubblesRef.current = bubbles;
+      sparklesRef.current = sparkles;
     };
 
     const handleMouse = (e) => {
@@ -54,66 +72,98 @@ function ParticleCanvas() {
       const cw = canvas.offsetWidth;
       const ch = canvas.offsetHeight;
       ctx.clearRect(0, 0, cw, ch);
-      const particles = particlesRef.current;
       const mouse = mouseRef.current;
-      const connectionDist = 120;
-      const mouseDist = 150;
 
-      for (let i = 0; i < particles.length; i++) {
-        const p = particles[i];
-        p.pulse += 0.015;
-        const pulseOpacity = p.opacity + Math.sin(p.pulse) * 0.15;
+      // ── Burbujas ──
+      for (const b of bubblesRef.current) {
+        b.wobble += b.wobbleSpeed;
+        const wobbleX = Math.sin(b.wobble) * b.wobbleAmp;
 
-        // Mouse repulsion
-        const dxm = p.x - mouse.x;
-        const dym = p.y - mouse.y;
+        // Mouse: burbujas se alejan suavemente
+        const dxm = b.x - mouse.x;
+        const dym = b.y - mouse.y;
         const distMouse = Math.sqrt(dxm * dxm + dym * dym);
-        if (distMouse < mouseDist) {
-          const force = (mouseDist - distMouse) / mouseDist * 0.02;
-          p.vx += dxm * force;
-          p.vy += dym * force;
+        let pushX = 0, pushY = 0;
+        if (distMouse < 120) {
+          const force = (120 - distMouse) / 120 * 0.5;
+          pushX = dxm * force;
+          pushY = dym * force;
         }
 
-        // Damping
-        p.vx *= 0.99;
-        p.vy *= 0.99;
+        b.x += b.vx + pushX;
+        b.y += b.vy + pushY;
 
-        p.x += p.vx;
-        p.y += p.vy;
+        // Reaparece abajo al salir por arriba
+        if (b.y < -b.radius * 2) {
+          b.y = ch + b.radius * 2;
+          b.x = Math.random() * cw;
+        }
+        if (b.x < -50) b.x = cw + 50;
+        if (b.x > cw + 50) b.x = -50;
 
-        // Wrap around
-        if (p.x < -10) p.x = cw + 10;
-        if (p.x > cw + 10) p.x = -10;
-        if (p.y < -10) p.y = ch + 10;
-        if (p.y > ch + 10) p.y = -10;
+        const drawX = b.x + wobbleX;
 
-        // Draw particle
+        // Burbuja exterior
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(6, 182, 212, ${pulseOpacity})`;
+        ctx.arc(drawX, b.y, b.radius, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(6, 182, 212, ${b.opacity * 0.8})`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Relleno sutil
+        const grad = ctx.createRadialGradient(drawX - b.radius * 0.3, b.y - b.radius * 0.3, 0, drawX, b.y, b.radius);
+        grad.addColorStop(0, `rgba(6, 182, 212, ${b.opacity * 0.4})`);
+        grad.addColorStop(0.5, `rgba(6, 182, 212, ${b.opacity * 0.15})`);
+        grad.addColorStop(1, `rgba(6, 182, 212, 0)`);
+        ctx.fillStyle = grad;
         ctx.fill();
 
-        // Glow
+        // Reflejo de luz (brillito en la burbuja)
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.radius * 3, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(6, 182, 212, ${pulseOpacity * 0.15})`;
+        ctx.arc(drawX - b.radius * 0.25, b.y - b.radius * 0.25, b.radius * 0.2, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 255, 255, ${b.opacity * 1.2})`;
         ctx.fill();
+      }
 
-        // Connections
-        for (let j = i + 1; j < particles.length; j++) {
-          const p2 = particles[j];
-          const dx = p.x - p2.x;
-          const dy = p.y - p2.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < connectionDist) {
-            const lineOpacity = (1 - dist / connectionDist) * 0.15;
-            ctx.beginPath();
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(p2.x, p2.y);
-            ctx.strokeStyle = `rgba(6, 182, 212, ${lineOpacity})`;
-            ctx.lineWidth = 0.5;
-            ctx.stroke();
+      // ── Destellos tipo brillo de sonrisa ──
+      for (const s of sparklesRef.current) {
+        s.life += s.lifeSpeed;
+        const opacity = Math.max(0, Math.sin(s.life)) * s.maxOpacity;
+
+        if (opacity > 0.01) {
+          // Estrella de 4 puntas
+          ctx.save();
+          ctx.translate(s.x, s.y);
+          ctx.rotate(s.life * 0.5);
+          ctx.beginPath();
+
+          const arms = 4;
+          const outerR = s.size;
+          const innerR = s.size * 0.3;
+          for (let a = 0; a < arms * 2; a++) {
+            const r = a % 2 === 0 ? outerR : innerR;
+            const angle = (a * Math.PI) / arms;
+            const method = a === 0 ? 'moveTo' : 'lineTo';
+            ctx[method](Math.cos(angle) * r, Math.sin(angle) * r);
           }
+          ctx.closePath();
+          ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+          ctx.fill();
+
+          // Glow del destello
+          ctx.beginPath();
+          ctx.arc(0, 0, s.size * 2, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(6, 182, 212, ${opacity * 0.2})`;
+          ctx.fill();
+
+          ctx.restore();
+        }
+
+        // Reposicionar cuando completa un ciclo
+        if (s.life > Math.PI * 2) {
+          s.life = -Math.random() * Math.PI;
+          s.x = Math.random() * cw;
+          s.y = Math.random() * ch;
         }
       }
 
@@ -128,7 +178,7 @@ function ParticleCanvas() {
       canvas.removeEventListener('mouseleave', handleMouseLeave);
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [initParticles]);
+  }, [initElements]);
 
   return (
     <canvas
@@ -223,7 +273,7 @@ export function Login({ onLogin }) {
       <div className="absolute inset-0 bg-[hsl(210,25%,5%)]">
         <div className="login-gradient-bg" />
         <FloatingOrbs />
-        <ParticleCanvas />
+        <DentalCanvas />
       </div>
 
       {/* Left panel - Branding (hidden on mobile) */}
