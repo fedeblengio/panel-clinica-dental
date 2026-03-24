@@ -13,29 +13,27 @@ function DentalCanvas() {
   const animFrameRef = useRef(null);
 
   const initElements = useCallback((width, height) => {
-    // Burbujas suaves - frescura/higiene
-    const bubbleCount = Math.min(40, Math.floor((width * height) / 25000));
+    const bubbleCount = Math.min(18, Math.floor((width * height) / 60000));
     const bubbles = Array.from({ length: bubbleCount }, () => ({
       x: Math.random() * width,
       y: Math.random() * height,
-      vy: -(Math.random() * 0.3 + 0.1), // flotan hacia arriba
-      vx: (Math.random() - 0.5) * 0.15,
-      radius: Math.random() * 18 + 6,
-      opacity: Math.random() * 0.12 + 0.03,
+      vy: -(Math.random() * 0.2 + 0.08),
+      vx: (Math.random() - 0.5) * 0.1,
+      radius: Math.random() * 14 + 5,
+      opacity: Math.random() * 0.1 + 0.03,
       wobble: Math.random() * Math.PI * 2,
-      wobbleSpeed: Math.random() * 0.008 + 0.003,
-      wobbleAmp: Math.random() * 15 + 5,
+      wobbleSpeed: Math.random() * 0.006 + 0.002,
+      wobbleAmp: Math.random() * 10 + 4,
     }));
 
-    // Destellos tipo "brillo de sonrisa"
-    const sparkleCount = Math.min(15, Math.floor((width * height) / 60000));
+    const sparkleCount = Math.min(8, Math.floor((width * height) / 120000));
     const sparkles = Array.from({ length: sparkleCount }, () => ({
       x: Math.random() * width,
       y: Math.random() * height,
       life: Math.random() * Math.PI * 2,
-      lifeSpeed: Math.random() * 0.03 + 0.01,
-      size: Math.random() * 3 + 1.5,
-      maxOpacity: Math.random() * 0.6 + 0.2,
+      lifeSpeed: Math.random() * 0.02 + 0.008,
+      size: Math.random() * 2.5 + 1,
+      maxOpacity: Math.random() * 0.5 + 0.15,
     }));
 
     return { bubbles, sparkles };
@@ -103,25 +101,19 @@ function DentalCanvas() {
 
         const drawX = b.x + wobbleX;
 
-        // Burbuja exterior
+        // Burbuja - borde + relleno simple (sin radialGradient)
         ctx.beginPath();
         ctx.arc(drawX, b.y, b.radius, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(6, 182, 212, ${b.opacity * 0.8})`;
-        ctx.lineWidth = 1;
+        ctx.fillStyle = `rgba(6, 182, 212, ${b.opacity * 0.15})`;
+        ctx.fill();
+        ctx.strokeStyle = `rgba(6, 182, 212, ${b.opacity * 0.6})`;
+        ctx.lineWidth = 0.8;
         ctx.stroke();
 
-        // Relleno sutil
-        const grad = ctx.createRadialGradient(drawX - b.radius * 0.3, b.y - b.radius * 0.3, 0, drawX, b.y, b.radius);
-        grad.addColorStop(0, `rgba(6, 182, 212, ${b.opacity * 0.4})`);
-        grad.addColorStop(0.5, `rgba(6, 182, 212, ${b.opacity * 0.15})`);
-        grad.addColorStop(1, `rgba(6, 182, 212, 0)`);
-        ctx.fillStyle = grad;
-        ctx.fill();
-
-        // Reflejo de luz (brillito en la burbuja)
+        // Reflejo de luz pequeño
         ctx.beginPath();
-        ctx.arc(drawX - b.radius * 0.25, b.y - b.radius * 0.25, b.radius * 0.2, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255, 255, 255, ${b.opacity * 1.2})`;
+        ctx.arc(drawX - b.radius * 0.25, b.y - b.radius * 0.3, b.radius * 0.15, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 255, 255, ${b.opacity * 0.8})`;
         ctx.fill();
       }
 
@@ -130,31 +122,20 @@ function DentalCanvas() {
         s.life += s.lifeSpeed;
         const opacity = Math.max(0, Math.sin(s.life)) * s.maxOpacity;
 
-        if (opacity > 0.01) {
-          // Estrella de 4 puntas
+        if (opacity > 0.02) {
+          // Cruz de brillo simple
           ctx.save();
           ctx.translate(s.x, s.y);
-          ctx.rotate(s.life * 0.5);
-          ctx.beginPath();
+          ctx.rotate(s.life * 0.3);
 
-          const arms = 4;
-          const outerR = s.size;
-          const innerR = s.size * 0.3;
-          for (let a = 0; a < arms * 2; a++) {
-            const r = a % 2 === 0 ? outerR : innerR;
-            const angle = (a * Math.PI) / arms;
-            const method = a === 0 ? 'moveTo' : 'lineTo';
-            ctx[method](Math.cos(angle) * r, Math.sin(angle) * r);
-          }
-          ctx.closePath();
-          ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
-          ctx.fill();
-
-          // Glow del destello
           ctx.beginPath();
-          ctx.arc(0, 0, s.size * 2, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(6, 182, 212, ${opacity * 0.2})`;
-          ctx.fill();
+          ctx.moveTo(0, -s.size);
+          ctx.lineTo(0, s.size);
+          ctx.moveTo(-s.size, 0);
+          ctx.lineTo(s.size, 0);
+          ctx.strokeStyle = `rgba(255, 255, 255, ${opacity})`;
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
 
           ctx.restore();
         }
@@ -195,8 +176,6 @@ function FloatingOrbs() {
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
       <div className="login-orb login-orb-1" />
       <div className="login-orb login-orb-2" />
-      <div className="login-orb login-orb-3" />
-      <div className="login-orb login-orb-4" />
     </div>
   );
 }

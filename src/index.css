@@ -67,113 +67,56 @@
 
 /* ─── Login Page Animations ─── */
 
-/* Animated gradient background */
+/* Animated gradient background - simple opacity shift */
 .login-gradient-bg {
   position: absolute;
   inset: 0;
   background:
     radial-gradient(ellipse 80% 50% at 20% 40%, rgba(6, 182, 212, 0.12) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 80% 20%, rgba(20, 184, 166, 0.08) 0%, transparent 50%),
-    radial-gradient(ellipse 50% 60% at 50% 80%, rgba(6, 182, 212, 0.06) 0%, transparent 50%);
-  animation: loginGradientShift 12s ease-in-out infinite alternate;
+    radial-gradient(ellipse 60% 40% at 80% 20%, rgba(20, 184, 166, 0.08) 0%, transparent 50%);
+  animation: loginGradientPulse 10s ease-in-out infinite alternate;
 }
 
-@keyframes loginGradientShift {
-  0% {
-    background:
-      radial-gradient(ellipse 80% 50% at 20% 40%, rgba(6, 182, 212, 0.12) 0%, transparent 60%),
-      radial-gradient(ellipse 60% 40% at 80% 20%, rgba(20, 184, 166, 0.08) 0%, transparent 50%),
-      radial-gradient(ellipse 50% 60% at 50% 80%, rgba(6, 182, 212, 0.06) 0%, transparent 50%);
-  }
-  33% {
-    background:
-      radial-gradient(ellipse 70% 60% at 40% 30%, rgba(6, 182, 212, 0.15) 0%, transparent 60%),
-      radial-gradient(ellipse 50% 50% at 70% 60%, rgba(20, 184, 166, 0.1) 0%, transparent 50%),
-      radial-gradient(ellipse 60% 40% at 30% 70%, rgba(6, 182, 212, 0.08) 0%, transparent 50%);
-  }
-  66% {
-    background:
-      radial-gradient(ellipse 60% 50% at 60% 50%, rgba(20, 184, 166, 0.12) 0%, transparent 60%),
-      radial-gradient(ellipse 70% 30% at 20% 60%, rgba(6, 182, 212, 0.1) 0%, transparent 50%),
-      radial-gradient(ellipse 40% 50% at 80% 40%, rgba(6, 182, 212, 0.06) 0%, transparent 50%);
-  }
-  100% {
-    background:
-      radial-gradient(ellipse 80% 40% at 30% 60%, rgba(6, 182, 212, 0.14) 0%, transparent 60%),
-      radial-gradient(ellipse 50% 50% at 70% 30%, rgba(20, 184, 166, 0.09) 0%, transparent 50%),
-      radial-gradient(ellipse 60% 50% at 50% 50%, rgba(6, 182, 212, 0.07) 0%, transparent 50%);
-  }
+@keyframes loginGradientPulse {
+  0% { opacity: 0.7; }
+  100% { opacity: 1; }
 }
 
-/* Floating orbs */
+/* Floating orbs - only 2, lighter blur */
 .login-orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.4;
+  filter: blur(50px);
+  opacity: 0.35;
   will-change: transform;
 }
 
 .login-orb-1 {
-  width: 300px;
-  height: 300px;
-  background: radial-gradient(circle, rgba(6, 182, 212, 0.3) 0%, transparent 70%);
-  top: -100px;
-  left: -50px;
-  animation: loginOrbFloat1 18s ease-in-out infinite;
+  width: 250px;
+  height: 250px;
+  background: rgba(6, 182, 212, 0.2);
+  top: -80px;
+  left: -40px;
+  animation: loginOrbFloat1 20s ease-in-out infinite;
 }
 
 .login-orb-2 {
-  width: 400px;
-  height: 400px;
-  background: radial-gradient(circle, rgba(20, 184, 166, 0.2) 0%, transparent 70%);
-  bottom: -150px;
-  right: -100px;
-  animation: loginOrbFloat2 22s ease-in-out infinite;
-}
-
-.login-orb-3 {
-  width: 200px;
-  height: 200px;
-  background: radial-gradient(circle, rgba(6, 182, 212, 0.25) 0%, transparent 70%);
-  top: 40%;
-  right: 30%;
-  animation: loginOrbFloat3 15s ease-in-out infinite;
-}
-
-.login-orb-4 {
-  width: 250px;
-  height: 250px;
-  background: radial-gradient(circle, rgba(20, 184, 166, 0.15) 0%, transparent 70%);
-  bottom: 20%;
-  left: 20%;
-  animation: loginOrbFloat4 20s ease-in-out infinite;
+  width: 300px;
+  height: 300px;
+  background: rgba(20, 184, 166, 0.15);
+  bottom: -100px;
+  right: -80px;
+  animation: loginOrbFloat2 24s ease-in-out infinite;
 }
 
 @keyframes loginOrbFloat1 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  25% { transform: translate(40px, 60px) scale(1.1); }
-  50% { transform: translate(80px, 20px) scale(0.95); }
-  75% { transform: translate(20px, 80px) scale(1.05); }
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(60px, 50px); }
 }
 
 @keyframes loginOrbFloat2 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  25% { transform: translate(-60px, -40px) scale(1.1); }
-  50% { transform: translate(-30px, -80px) scale(0.9); }
-  75% { transform: translate(-70px, -20px) scale(1.05); }
-}
-
-@keyframes loginOrbFloat3 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(50px, -30px) scale(1.15); }
-  66% { transform: translate(-30px, 50px) scale(0.9); }
-}
-
-@keyframes loginOrbFloat4 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(-40px, -50px) scale(1.1); }
-  66% { transform: translate(40px, 30px) scale(0.95); }
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(-50px, -60px); }
 }
 
 /* Glassmorphism card */
