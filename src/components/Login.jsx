@@ -314,12 +314,12 @@ export function Login({ onLogin }) {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.7 + i * 0.1, duration: 0.5, ease: 'easeOut' }}
                   >
-                    <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-400/15 flex items-center justify-center shrink-0 group-hover:bg-cyan-500/20 group-hover:border-cyan-400/30 transition-all duration-300">
-                      <Icon size={18} className="text-cyan-400" strokeWidth={1.5} />
+                    <div className="w-11 h-11 rounded-xl bg-cyan-500/10 border border-cyan-400/15 flex items-center justify-center shrink-0 group-hover:bg-cyan-500/20 group-hover:border-cyan-400/30 transition-all duration-300">
+                      <Icon size={20} className="text-cyan-400" strokeWidth={1.5} />
                     </div>
                     <div>
-                      <span className="text-white/90 text-sm font-medium">{text}</span>
-                      <p className="text-white/40 text-xs">{desc}</p>
+                      <span className="text-white/90 text-base font-medium">{text}</span>
+                      <p className="text-white/40 text-sm">{desc}</p>
                     </div>
                   </motion.div>
                 ))}
