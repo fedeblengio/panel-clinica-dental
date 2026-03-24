@@ -269,99 +269,110 @@ export function Login({ onLogin }) {
 
   return (
     <div className="min-h-screen flex dark relative overflow-hidden">
-      {/* Global animated background */}
+      {/* Global animated background - same across both halves */}
       <div className="absolute inset-0 bg-[hsl(210,25%,5%)]">
         <div className="login-gradient-bg" />
         <FloatingOrbs />
         <DentalCanvas />
       </div>
 
-      {/* Left panel - Branding (hidden on mobile) */}
-      <div className="hidden lg:flex lg:w-1/2 xl:w-[55%] relative z-10">
-        <div className="relative z-10 flex flex-col justify-between p-12 xl:p-16 w-full">
-          {/* Logo */}
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, ease: 'easeOut' }}
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-md border border-white/10 flex items-center justify-center shadow-lg shadow-cyan-500/10">
-                <DentalLogo size={28} className="text-cyan-400" />
-              </div>
-              <span className="text-2xl font-bold text-white tracking-tight">DentalPanel</span>
-            </div>
-            <p className="text-cyan-300/70 text-sm ml-1 font-light">
-              Gestión inteligente para tu clínica
-            </p>
-          </motion.div>
+      {/* Two-panel layout with gap */}
+      <div className="relative z-10 flex flex-col lg:flex-row w-full min-h-screen p-4 lg:p-6 gap-4 lg:gap-6">
 
-          {/* Hero text */}
-          <div className="space-y-10">
+        {/* LEFT CARD - Branding (hidden on mobile) */}
+        <motion.div
+          className="hidden lg:flex lg:w-1/2 login-glass-card rounded-2xl overflow-hidden"
+          initial={{ opacity: 0, x: -40 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <div className="flex flex-col justify-between p-10 xl:p-14 w-full">
+            {/* Logo */}
             <motion.div
-              initial={{ opacity: 0, y: 30 }}
+              initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3, duration: 0.8, ease: 'easeOut' }}
+              transition={{ duration: 0.8, delay: 0.2, ease: 'easeOut' }}
             >
-              <h2 className="text-4xl xl:text-5xl font-bold text-white leading-tight">
-                Tu clínica,<br />
-                <span className="login-gradient-text">bajo control.</span>
-              </h2>
-              <p className="text-white/60 mt-4 text-lg max-w-md leading-relaxed">
-                Automatizá la gestión de pacientes, citas y comunicación con WhatsApp. Todo desde un solo lugar.
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-12 h-12 rounded-xl bg-white/10 backdrop-blur-md border border-white/10 flex items-center justify-center shadow-lg shadow-cyan-500/10">
+                  <DentalLogo size={28} className="text-cyan-400" />
+                </div>
+                <span className="text-2xl font-bold text-white tracking-tight">DentalPanel</span>
+              </div>
+              <p className="text-cyan-300/70 text-sm ml-1 font-light">
+                Gestión inteligente para tu clínica
               </p>
             </motion.div>
 
-            {/* Features */}
+            {/* Hero text */}
+            <div className="space-y-10">
+              <motion.div
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4, duration: 0.8, ease: 'easeOut' }}
+              >
+                <h2 className="text-4xl xl:text-5xl font-bold text-white leading-tight">
+                  Tu clínica,<br />
+                  <span className="login-gradient-text">bajo control.</span>
+                </h2>
+                <p className="text-white/60 mt-4 text-lg max-w-md leading-relaxed">
+                  Automatizá la gestión de pacientes, citas y comunicación con WhatsApp. Todo desde un solo lugar.
+                </p>
+              </motion.div>
+
+              {/* Features */}
+              <motion.div
+                className="space-y-3"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.6, duration: 0.6 }}
+              >
+                {features.map(({ icon: Icon, text, desc }, i) => (
+                  <motion.div
+                    key={text}
+                    className="flex items-center gap-4 group"
+                    initial={{ opacity: 0, x: -30 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.7 + i * 0.1, duration: 0.5, ease: 'easeOut' }}
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-400/15 flex items-center justify-center shrink-0 group-hover:bg-cyan-500/20 group-hover:border-cyan-400/30 transition-all duration-300">
+                      <Icon size={18} className="text-cyan-400" strokeWidth={1.5} />
+                    </div>
+                    <div>
+                      <span className="text-white/90 text-sm font-medium">{text}</span>
+                      <p className="text-white/40 text-xs">{desc}</p>
+                    </div>
+                  </motion.div>
+                ))}
+              </motion.div>
+            </div>
+
+            {/* Footer */}
             <motion.div
-              className="space-y-3"
+              className="flex items-center gap-2 text-white/30 text-xs"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.6, duration: 0.6 }}
+              transition={{ delay: 1.4 }}
             >
-              {features.map(({ icon: Icon, text, desc }, i) => (
-                <motion.div
-                  key={text}
-                  className="flex items-center gap-4 group"
-                  initial={{ opacity: 0, x: -30 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.7 + i * 0.1, duration: 0.5, ease: 'easeOut' }}
-                >
-                  <div className="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-400/15 flex items-center justify-center shrink-0 group-hover:bg-cyan-500/20 group-hover:border-cyan-400/30 transition-all duration-300">
-                    <Icon size={18} className="text-cyan-400" strokeWidth={1.5} />
-                  </div>
-                  <div>
-                    <span className="text-white/90 text-sm font-medium">{text}</span>
-                    <p className="text-white/40 text-xs">{desc}</p>
-                  </div>
-                </motion.div>
-              ))}
+              <Shield size={12} />
+              <span>&copy; {new Date().getFullYear()} DentalPanel. Todos los derechos reservados.</span>
             </motion.div>
           </div>
+        </motion.div>
 
-          {/* Footer */}
-          <motion.div
-            className="flex items-center gap-2 text-white/30 text-xs"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 1.4 }}
-          >
-            <Shield size={12} />
-            <span>&copy; {new Date().getFullYear()} DentalPanel. Todos los derechos reservados.</span>
-          </motion.div>
-        </div>
-      </div>
-
-      {/* Right panel - Login form */}
-      <div className="flex-1 flex items-center justify-center relative z-10 px-4 sm:px-8">
-        {/* Glassmorphism card */}
+        {/* RIGHT CARD - Login form */}
         <motion.div
-          className="w-full max-w-sm"
-          initial={{ opacity: 0, y: 30, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1], delay: 0.2 }}
+          className="flex-1 lg:w-1/2 login-glass-card rounded-2xl flex items-center justify-center px-4 sm:px-8"
+          initial={{ opacity: 0, x: 40 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
         >
-          <div className="login-glass-card rounded-2xl p-8 sm:p-10">
+          <motion.div
+            className="w-full max-w-sm py-10"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.4 }}
+          >
             {/* Mobile logo */}
             <div className="flex flex-col items-center mb-8 lg:hidden">
               <motion.div
@@ -455,11 +466,11 @@ export function Login({ onLogin }) {
                 </Button>
               </motion.div>
             </motion.form>
-          </div>
 
-          <p className="text-center text-xs text-white/20 mt-6 lg:hidden">
-            &copy; {new Date().getFullYear()} DentalPanel
-          </p>
+            <p className="text-center text-xs text-white/20 mt-8 lg:hidden">
+              &copy; {new Date().getFullYear()} DentalPanel
+            </p>
+          </motion.div>
         </motion.div>
       </div>
     </div>
