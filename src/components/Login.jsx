@@ -260,7 +260,7 @@ export function Login({ onLogin }) {
 
         {/* LEFT CARD - Branding (hidden on mobile) */}
         <motion.div
-          className="hidden lg:flex lg:w-1/2 login-glass-card rounded-2xl overflow-hidden"
+          className="hidden lg:flex lg:w-[38%] xl:w-[35%] login-glass-card rounded-2xl overflow-hidden"
           initial={{ opacity: 0, x: -40 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
