@@ -82,48 +82,9 @@
   100% { opacity: 1; }
 }
 
-/* Floating orbs - only 2, lighter blur */
-.login-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(50px);
-  opacity: 0.35;
-  will-change: transform;
-}
-
-.login-orb-1 {
-  width: 250px;
-  height: 250px;
-  background: rgba(6, 182, 212, 0.2);
-  top: -80px;
-  left: -40px;
-  animation: loginOrbFloat1 20s ease-in-out infinite;
-}
-
-.login-orb-2 {
-  width: 300px;
-  height: 300px;
-  background: rgba(20, 184, 166, 0.15);
-  bottom: -100px;
-  right: -80px;
-  animation: loginOrbFloat2 24s ease-in-out infinite;
-}
-
-@keyframes loginOrbFloat1 {
-  0%, 100% { transform: translate(0, 0); }
-  50% { transform: translate(60px, 50px); }
-}
-
-@keyframes loginOrbFloat2 {
-  0%, 100% { transform: translate(0, 0); }
-  50% { transform: translate(-50px, -60px); }
-}
-
 /* Glassmorphism card */
 .login-glass-card {
   background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.3),
