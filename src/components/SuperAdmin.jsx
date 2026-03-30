@@ -8,7 +8,7 @@ import { Plus, Building2, Users, Pencil, Eye, Wifi, WifiOff, QrCode, RefreshCw, 
 import { api, setClinicaId } from '../lib/utils';
 
 const emptyClinica = { nombre: '', slug: '', instance_name: '' };
-const emptyUsuario = { username: '', password: '', nombre: '', rol: 'admin', clinica_id: '' };
+const emptyUsuario = { username: '', password: '', nombre: '', rol: 'admin', clinica_id: '', telefono: '' };
 
 const STATUS_MAP = {
   open: { label: 'Conectado', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300', icon: Wifi },
@@ -376,7 +376,7 @@ export function SuperAdmin() {
                           </td>
                           <td className="py-4 text-right">
                             <Button variant="ghost" size="icon" onClick={() => {
-                              setFormUsuario({ username: u.username, password: '', nombre: u.nombre, rol: u.rol, clinica_id: u.clinica_id || '', activo: u.activo });
+                              setFormUsuario({ username: u.username, password: '', nombre: u.nombre, rol: u.rol, clinica_id: u.clinica_id || '', activo: u.activo, telefono: u.telefono || '' });
                               setEditingUsuario(u.id);
                               setError('');
                               setDialogUsuario(true);
@@ -590,7 +590,10 @@ export function SuperAdmin() {
             <Input label="Nombre completo *" value={formUsuario.nombre} onChange={e => setFormUsuario({ ...formUsuario, nombre: e.target.value })} required placeholder="Dr. Juan Pérez" />
             <Input label="Usuario *" value={formUsuario.username} onChange={e => setFormUsuario({ ...formUsuario, username: e.target.value })} required placeholder="juanperez" />
           </div>
-          <Input label={editingUsuario ? "Nueva contraseña (vacío = no cambiar)" : "Contraseña *"} type="password" value={formUsuario.password} onChange={e => setFormUsuario({ ...formUsuario, password: e.target.value })} required={!editingUsuario} placeholder="••••••••" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input label={editingUsuario ? "Nueva contraseña (vacío = no cambiar)" : "Contraseña *"} type="password" value={formUsuario.password} onChange={e => setFormUsuario({ ...formUsuario, password: e.target.value })} required={!editingUsuario} placeholder="••••••••" />
+            <Input label="WhatsApp (para recuperar contraseña)" value={formUsuario.telefono} onChange={e => setFormUsuario({ ...formUsuario, telefono: e.target.value.replace(/[^0-9]/g, '') })} placeholder="595981123456" />
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium mb-2 block">Rol *</label>

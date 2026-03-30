@@ -193,6 +193,7 @@ async function initDB() {
     await pool.query(`ALTER TABLE citas ADD COLUMN IF NOT EXISTS clinica_id INTEGER REFERENCES clinicas(id)`).catch(() => {});
     await pool.query(`ALTER TABLE n8n_chat_histories ADD COLUMN IF NOT EXISTS clinica_id INTEGER REFERENCES clinicas(id)`).catch(() => {});
     await pool.query(`ALTER TABLE configuracion_clinica ADD COLUMN IF NOT EXISTS prompt_sistema TEXT DEFAULT ''`).catch(() => {});
+    await pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telefono VARCHAR(50)`).catch(() => {});
     await pool.query(`ALTER TABLE citas ADD COLUMN IF NOT EXISTS recordatorio_24h BOOLEAN DEFAULT false`).catch(() => {});
     await pool.query(`ALTER TABLE citas ADD COLUMN IF NOT EXISTS recordatorio_1h BOOLEAN DEFAULT false`).catch(() => {});
 
@@ -365,20 +366,88 @@ app.post('/api/change-password', requireAuth, async (req, res) => {
   }
 });
 
-// Change password (public - no session required, verifies with username + current password)
-app.post('/api/change-password-public', async (req, res) => {
-  const { username, currentPassword, newPassword } = req.body;
-  if (!username || !currentPassword || !newPassword) return res.status(400).json({ error: 'Faltan campos' });
-  if (newPassword.length < 4) return res.status(400).json({ error: 'La contraseña debe tener al menos 4 caracteres' });
+// --- FORGOT PASSWORD (WhatsApp code) ---
+const resetCodes = new Map(); // key: username, value: { code, expires, attempts }
+
+app.post('/api/forgot-password/send-code', async (req, res) => {
+  const { username } = req.body;
+  if (!username) return res.status(400).json({ error: 'Ingresá tu usuario' });
   try {
-    const result = await pool.query('SELECT id, password_hash FROM usuarios WHERE username = $1', [username]);
-    if (!result.rows[0] || !bcrypt.compareSync(currentPassword, result.rows[0].password_hash)) {
-      return res.status(401).json({ error: 'Usuario o contraseña actual incorrectos' });
+    const result = await pool.query(
+      `SELECT u.id, u.telefono, u.clinica_id, c.instance_name
+       FROM usuarios u LEFT JOIN clinicas c ON u.clinica_id = c.id
+       WHERE u.username = $1 AND u.activo = true`, [username]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    const user = result.rows[0];
+    if (!user.telefono) return res.status(400).json({ error: 'Este usuario no tiene teléfono registrado. Contactá al administrador.' });
+
+    // Rate limit: max 3 codes per hour
+    const existing = resetCodes.get(username);
+    if (existing && existing.attempts >= 3 && Date.now() - existing.firstAttempt < 3600000) {
+      return res.status(429).json({ error: 'Demasiados intentos. Esperá 1 hora o contactá al administrador.' });
     }
+
+    // Generate 6-digit code
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const now = Date.now();
+    resetCodes.set(username, {
+      code,
+      expires: now + 600000, // 10 minutes
+      attempts: (existing && now - existing.firstAttempt < 3600000) ? existing.attempts + 1 : 1,
+      firstAttempt: (existing && now - existing.firstAttempt < 3600000) ? existing.firstAttempt : now,
+    });
+
+    // Find instance to send from (user's clinic or first available)
+    let instanceName = user.instance_name;
+    if (!instanceName) {
+      const fallback = await pool.query('SELECT instance_name FROM clinicas WHERE activa = true LIMIT 1');
+      instanceName = fallback.rows[0]?.instance_name;
+    }
+    if (!instanceName || !EVOLUTION_API_KEY) {
+      return res.status(500).json({ error: 'No se puede enviar el mensaje. Contactá al administrador.' });
+    }
+
+    // Send WhatsApp message via Evolution API
+    const phone = user.telefono.replace(/[^0-9]/g, '');
+    await evolutionFetch(`/message/sendText/${instanceName}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        number: phone,
+        text: `🔐 Tu código de verificación es: *${code}*\n\nVálido por 10 minutos.\n\nSi no solicitaste esto, ignorá este mensaje.`,
+      }),
+    });
+
+    // Mask phone for response
+    const masked = phone.slice(0, 4) + '****' + phone.slice(-2);
+    res.json({ ok: true, phone: masked });
+  } catch (err) {
+    console.error('Send reset code error:', err);
+    res.status(500).json({ error: 'Error al enviar el código' });
+  }
+});
+
+app.post('/api/forgot-password/verify', async (req, res) => {
+  const { username, code, newPassword } = req.body;
+  if (!username || !code || !newPassword) return res.status(400).json({ error: 'Faltan campos' });
+  if (newPassword.length < 4) return res.status(400).json({ error: 'La contraseña debe tener al menos 4 caracteres' });
+
+  const entry = resetCodes.get(username);
+  if (!entry) return res.status(400).json({ error: 'No hay código pendiente. Solicitá uno nuevo.' });
+  if (Date.now() > entry.expires) {
+    resetCodes.delete(username);
+    return res.status(400).json({ error: 'El código expiró. Solicitá uno nuevo.' });
+  }
+  if (entry.code !== code) return res.status(400).json({ error: 'Código incorrecto' });
+
+  try {
     const hash = bcrypt.hashSync(newPassword, 10);
-    await pool.query('UPDATE usuarios SET password_hash = $1 WHERE id = $2', [hash, result.rows[0].id]);
+    await pool.query('UPDATE usuarios SET password_hash = $1 WHERE username = $2', [hash, username]);
+    resetCodes.delete(username);
     res.json({ ok: true });
   } catch (err) {
+    console.error('Verify reset code error:', err);
     res.status(500).json({ error: 'Error al cambiar contraseña' });
   }
 });
@@ -1283,7 +1352,7 @@ app.delete('/api/admin/soporte/:id', requireAuth, requireSuperAdmin, async (req,
 app.get('/api/admin/usuarios', requireAuth, requireSuperAdmin, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT u.id, u.username, u.nombre, u.rol, u.clinica_id, u.activo, u.created_at,
+      SELECT u.id, u.username, u.nombre, u.rol, u.clinica_id, u.activo, u.telefono, u.created_at,
         c.nombre as clinica_nombre
       FROM usuarios u
       LEFT JOIN clinicas c ON u.clinica_id = c.id
@@ -1298,11 +1367,11 @@ app.get('/api/admin/usuarios', requireAuth, requireSuperAdmin, async (req, res) 
 
 app.post('/api/admin/usuarios', requireAuth, requireSuperAdmin, async (req, res) => {
   try {
-    const { username, password, nombre, rol, clinica_id } = req.body;
+    const { username, password, nombre, rol, clinica_id, telefono } = req.body;
     const hash = bcrypt.hashSync(password, 10);
     const result = await pool.query(
-      'INSERT INTO usuarios (username, password_hash, nombre, rol, clinica_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, username, nombre, rol, clinica_id',
-      [username, hash, nombre, rol || 'admin', clinica_id || null]
+      'INSERT INTO usuarios (username, password_hash, nombre, rol, clinica_id, telefono) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, username, nombre, rol, clinica_id, telefono',
+      [username, hash, nombre, rol || 'admin', clinica_id || null, telefono || null]
     );
     res.json(result.rows[0]);
   } catch (err) {
@@ -1313,17 +1382,17 @@ app.post('/api/admin/usuarios', requireAuth, requireSuperAdmin, async (req, res)
 
 app.put('/api/admin/usuarios/:id', requireAuth, requireSuperAdmin, async (req, res) => {
   try {
-    const { username, password, nombre, rol, clinica_id, activo } = req.body;
+    const { username, password, nombre, rol, clinica_id, activo, telefono } = req.body;
     if (password) {
       const hash = bcrypt.hashSync(password, 10);
       await pool.query(
-        'UPDATE usuarios SET username=$1, password_hash=$2, nombre=$3, rol=$4, clinica_id=$5, activo=$6 WHERE id=$7',
-        [username, hash, nombre, rol, clinica_id || null, activo !== false, req.params.id]
+        'UPDATE usuarios SET username=$1, password_hash=$2, nombre=$3, rol=$4, clinica_id=$5, activo=$6, telefono=$7 WHERE id=$8',
+        [username, hash, nombre, rol, clinica_id || null, activo !== false, telefono || null, req.params.id]
       );
     } else {
       await pool.query(
-        'UPDATE usuarios SET username=$1, nombre=$2, rol=$3, clinica_id=$4, activo=$5 WHERE id=$6',
-        [username, nombre, rol, clinica_id || null, activo !== false, req.params.id]
+        'UPDATE usuarios SET username=$1, nombre=$2, rol=$3, clinica_id=$4, activo=$5, telefono=$6 WHERE id=$7',
+        [username, nombre, rol, clinica_id || null, activo !== false, telefono || null, req.params.id]
       );
     }
     res.json({ ok: true });
