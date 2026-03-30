@@ -4,7 +4,7 @@ import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Dialog } from './ui/dialog';
-import { Plus, Building2, Users, Pencil, Eye, Wifi, WifiOff, QrCode, RefreshCw, Phone, Activity, MessageSquare, CalendarCheck, AlertTriangle, Shield, ShieldAlert, ShieldCheck, Headphones, Trash2, Mail, MessageCircle } from 'lucide-react';
+import { Plus, Building2, Users, Pencil, Eye, Wifi, WifiOff, QrCode, RefreshCw, Phone, Activity, MessageSquare, CalendarCheck, AlertTriangle, Shield, ShieldAlert, ShieldCheck, Headphones, Trash2, Mail, MessageCircle, RotateCcw } from 'lucide-react';
 import { api, setClinicaId } from '../lib/utils';
 
 const emptyClinica = { nombre: '', slug: '', instance_name: '' };
@@ -53,6 +53,12 @@ export function SuperAdmin() {
   const [dialogSoporte, setDialogSoporte] = useState(false);
   const [formSoporte, setFormSoporte] = useState({ nombre: '', rol: 'Soporte Técnico', email: '', whatsapp: '' });
   const [editingSoporte, setEditingSoporte] = useState(null);
+  const [dialogReset, setDialogReset] = useState(false);
+  const [resetClinica, setResetClinica] = useState(null);
+  const [resetOptions, setResetOptions] = useState({ pacientes: true, citas: true, chat: true, config: false });
+  const [resetConfirmName, setResetConfirmName] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetResult, setResetResult] = useState(null);
 
   const loadClinicas = () => api('/admin/clinicas').then(setClinicas).catch(console.error);
   const loadUsuarios = () => api('/admin/usuarios').then(setUsuarios).catch(console.error);
@@ -131,6 +137,36 @@ export function SuperAdmin() {
       await api(`/admin/soporte/${id}`, { method: 'DELETE' });
       loadSoporte();
     } catch (err) { console.error(err); }
+  };
+
+  const openResetDialog = (clinica) => {
+    setResetClinica(clinica);
+    setResetOptions({ pacientes: true, citas: true, chat: true, config: false });
+    setResetConfirmName('');
+    setResetResult(null);
+    setError('');
+    setDialogReset(true);
+  };
+
+  const handleResetData = async () => {
+    if (!resetClinica || resetConfirmName !== resetClinica.nombre || resetLoading) return;
+    setResetLoading(true);
+    setError('');
+    try {
+      const result = await api(`/admin/clinicas/${resetClinica.id}/reset-data`, {
+        method: 'POST',
+        body: {
+          confirm_nombre: resetConfirmName,
+          borrar_pacientes: resetOptions.pacientes,
+          borrar_citas: resetOptions.citas || resetOptions.pacientes,
+          borrar_chat: resetOptions.chat,
+          borrar_config: resetOptions.config,
+        }
+      });
+      setResetResult(result.deleted);
+      loadClinicas();
+    } catch (err) { setError(err.message || 'Error inesperado'); }
+    finally { setResetLoading(false); }
   };
 
   const fetchQR = async (clinicaId) => {
@@ -281,6 +317,9 @@ export function SuperAdmin() {
                                 setDialogClinica(true);
                               }}>
                                 <Pencil size={16} />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => openResetDialog(c)} title="Reiniciar datos de clínica">
+                                <RotateCcw size={16} className="text-red-500" />
                               </Button>
                             </div>
                           </td>
@@ -629,6 +668,98 @@ export function SuperAdmin() {
             <Button type="button" variant="outline" onClick={() => setDialogSoporte(false)}>Cancelar</Button>
           </div>
         </form>
+      </Dialog>
+
+      {/* Dialog Reiniciar datos de clínica */}
+      <Dialog open={dialogReset} onClose={() => { if (!resetLoading) setDialogReset(false); }} title={`Reiniciar datos - ${resetClinica?.nombre || ''}`}>
+        <div className="space-y-4">
+          {error && <div className="bg-red-50 text-red-700 border border-red-200 dark:bg-red-500/15 dark:text-red-400 dark:border-red-500/30 rounded-lg px-4 py-3 text-sm">{error}</div>}
+
+          {resetResult ? (
+            <div className="space-y-3">
+              <div className="bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30 rounded-lg px-4 py-3 text-sm">
+                Datos reiniciados correctamente
+              </div>
+              <div className="space-y-1 text-sm">
+                {resetResult.chat > 0 && <p>Mensajes de chat eliminados: <strong>{resetResult.chat}</strong></p>}
+                {resetResult.citas > 0 && <p>Citas eliminadas: <strong>{resetResult.citas}</strong></p>}
+                {resetResult.pacientes > 0 && <p>Pacientes eliminados: <strong>{resetResult.pacientes}</strong></p>}
+                {resetResult.configuracion > 0 && <p>Configuración eliminada: <strong>{resetResult.configuracion}</strong></p>}
+                {resetResult.chat === 0 && resetResult.citas === 0 && resetResult.pacientes === 0 && resetResult.configuracion === 0 && (
+                  <p className="text-muted-foreground">No había datos para eliminar</p>
+                )}
+              </div>
+              <Button className="w-full" onClick={() => setDialogReset(false)}>Cerrar</Button>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Seleccioná qué datos querés eliminar de <strong>{resetClinica?.nombre}</strong>. Esta acción no se puede deshacer.
+              </p>
+
+              <div className="space-y-2">
+                <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-muted/50 transition-colors ${resetLoading ? 'opacity-50 pointer-events-none' : ''}`}>
+                  <input type="checkbox" checked={resetOptions.pacientes} onChange={e => {
+                    const checked = e.target.checked;
+                    setResetOptions(prev => ({ ...prev, pacientes: checked, citas: checked ? true : prev.citas }));
+                  }} disabled={resetLoading} className="w-4 h-4 rounded border-gray-300" />
+                  <div className="flex-1">
+                    <span className="font-medium text-sm">Pacientes</span>
+                    <span className="text-xs text-muted-foreground ml-2">({resetClinica?.total_pacientes || 0} registros)</span>
+                  </div>
+                </label>
+                <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-muted/50 transition-colors ${resetLoading ? 'opacity-50 pointer-events-none' : ''} ${resetOptions.pacientes ? 'opacity-50 pointer-events-none' : ''}`}>
+                  <input type="checkbox" checked={resetOptions.citas || resetOptions.pacientes} onChange={e => setResetOptions({ ...resetOptions, citas: e.target.checked })}
+                    disabled={resetLoading || resetOptions.pacientes} className="w-4 h-4 rounded border-gray-300" />
+                  <div className="flex-1">
+                    <span className="font-medium text-sm">Citas</span>
+                    <span className="text-xs text-muted-foreground ml-2">({resetClinica?.total_citas || 0} registros)</span>
+                    {resetOptions.pacientes && <span className="text-xs text-amber-600 dark:text-amber-400 ml-1">(se borran con pacientes)</span>}
+                  </div>
+                </label>
+                <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-muted/50 transition-colors ${resetLoading ? 'opacity-50 pointer-events-none' : ''}`}>
+                  <input type="checkbox" checked={resetOptions.chat} onChange={e => setResetOptions({ ...resetOptions, chat: e.target.checked })}
+                    disabled={resetLoading} className="w-4 h-4 rounded border-gray-300" />
+                  <div className="flex-1">
+                    <span className="font-medium text-sm">Historial de chat del bot</span>
+                    <span className="text-xs text-muted-foreground ml-2">(memoria de conversaciones)</span>
+                  </div>
+                </label>
+                <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-muted/50 transition-colors ${resetLoading ? 'opacity-50 pointer-events-none' : ''}`}>
+                  <input type="checkbox" checked={resetOptions.config} onChange={e => setResetOptions({ ...resetOptions, config: e.target.checked })}
+                    disabled={resetLoading} className="w-4 h-4 rounded border-gray-300" />
+                  <div className="flex-1">
+                    <span className="font-medium text-sm">Configuración</span>
+                    <span className="text-xs text-muted-foreground ml-2">(bot, horarios, servicios)</span>
+                  </div>
+                </label>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <label className="text-sm font-medium">
+                  Para confirmar, escribí <strong>"{resetClinica?.nombre}"</strong>
+                </label>
+                <Input
+                  value={resetConfirmName}
+                  onChange={e => setResetConfirmName(e.target.value)}
+                  placeholder={resetClinica?.nombre}
+                  disabled={resetLoading}
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <Button
+                  onClick={handleResetData}
+                  disabled={resetConfirmName !== resetClinica?.nombre || resetLoading || (!resetOptions.pacientes && !resetOptions.citas && !resetOptions.chat && !resetOptions.config)}
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
+                >
+                  {resetLoading ? 'Reiniciando...' : 'Reiniciar datos'}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setDialogReset(false)} disabled={resetLoading}>Cancelar</Button>
+              </div>
+            </>
+          )}
+        </div>
       </Dialog>
     </div>
   );

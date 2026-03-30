@@ -1010,6 +1010,50 @@ app.put('/api/admin/clinicas/:id', requireAuth, requireSuperAdmin, async (req, r
   }
 });
 
+// Reset clinic data (superadmin only)
+app.post('/api/admin/clinicas/:id/reset-data', requireAuth, requireSuperAdmin, async (req, res) => {
+  try {
+    const clinicaId = req.params.id;
+    const { confirm_nombre, borrar_pacientes, borrar_citas, borrar_chat, borrar_config } = req.body;
+
+    // Verify clinic exists
+    const clinica = await pool.query('SELECT id, nombre FROM clinicas WHERE id = $1', [clinicaId]);
+    if (!clinica.rows[0]) return res.status(404).json({ error: 'Clínica no encontrada' });
+
+    // Verify confirmation matches clinic name
+    if (confirm_nombre !== clinica.rows[0].nombre) {
+      return res.status(400).json({ error: 'El nombre de confirmación no coincide' });
+    }
+
+    const stats = { chat: 0, citas: 0, pacientes: 0, configuracion: 0 };
+
+    // Delete in correct order (respecting dependencies)
+    if (borrar_chat) {
+      const r = await pool.query('DELETE FROM n8n_chat_histories WHERE clinica_id = $1', [clinicaId]);
+      stats.chat = r.rowCount;
+    }
+    // Always delete citas if deleting pacientes (avoid orphaned records)
+    if (borrar_citas || borrar_pacientes) {
+      const r = await pool.query('DELETE FROM citas WHERE clinica_id = $1', [clinicaId]);
+      stats.citas = r.rowCount;
+    }
+    if (borrar_pacientes) {
+      const r = await pool.query('DELETE FROM pacientes WHERE clinica_id = $1', [clinicaId]);
+      stats.pacientes = r.rowCount;
+    }
+    if (borrar_config) {
+      const r = await pool.query('DELETE FROM configuracion_clinica WHERE clinica_id = $1', [clinicaId]);
+      stats.configuracion = r.rowCount;
+    }
+
+    console.log(`Reset data clinica ${clinicaId} (${clinica.rows[0].nombre}):`, stats);
+    res.json({ ok: true, deleted: stats });
+  } catch (err) {
+    console.error('Reset clinic data error:', err);
+    res.status(500).json({ error: 'Error al reiniciar datos de clínica' });
+  }
+});
+
 // Get QR code for connecting WhatsApp
 app.get('/api/admin/clinicas/:id/qrcode', requireAuth, requireSuperAdmin, async (req, res) => {
   try {
