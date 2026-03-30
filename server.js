@@ -365,6 +365,24 @@ app.post('/api/change-password', requireAuth, async (req, res) => {
   }
 });
 
+// Change password (public - no session required, verifies with username + current password)
+app.post('/api/change-password-public', async (req, res) => {
+  const { username, currentPassword, newPassword } = req.body;
+  if (!username || !currentPassword || !newPassword) return res.status(400).json({ error: 'Faltan campos' });
+  if (newPassword.length < 4) return res.status(400).json({ error: 'La contraseña debe tener al menos 4 caracteres' });
+  try {
+    const result = await pool.query('SELECT id, password_hash FROM usuarios WHERE username = $1', [username]);
+    if (!result.rows[0] || !bcrypt.compareSync(currentPassword, result.rows[0].password_hash)) {
+      return res.status(401).json({ error: 'Usuario o contraseña actual incorrectos' });
+    }
+    const hash = bcrypt.hashSync(newPassword, 10);
+    await pool.query('UPDATE usuarios SET password_hash = $1 WHERE id = $2', [hash, result.rows[0].id]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Error al cambiar contraseña' });
+  }
+});
+
 // --- SUPER ADMIN: SWITCH CLINICA ---
 app.post('/api/admin/switch-clinica', requireAuth, requireSuperAdmin, (req, res) => {
   const { clinicaId } = req.body;

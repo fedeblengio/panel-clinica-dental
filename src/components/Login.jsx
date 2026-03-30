@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { Shield, Clock, Wifi, CalendarDays, Users, MessageSquare, Sparkles } from 'lucide-react';
+import { Shield, Clock, Wifi, CalendarDays, Users, MessageSquare, Sparkles, Eye, EyeOff, ArrowLeft, KeyRound } from 'lucide-react';
 
 /* ─── Dental Logo ─── */
 function DentalLogo({ size = 32, className = '' }) {
@@ -29,6 +29,13 @@ export function Login({ onLogin }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [blockedFor, setBlockedFor] = useState(0);
+  const [showPassword, setShowPassword] = useState(false);
+  const [mode, setMode] = useState('login'); // 'login' | 'changePassword'
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [changeSuccess, setChangeSuccess] = useState(false);
 
   useEffect(() => {
     if (blockedFor <= 0) return;
@@ -66,6 +73,47 @@ export function Login({ onLogin }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (loading) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/change-password-public', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, currentPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setChangeSuccess(true);
+      } else {
+        setError(data.error || 'Error al cambiar contraseña');
+      }
+    } catch {
+      setError('Error de conexión');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const goToChangePassword = () => {
+    setMode('changePassword');
+    setError('');
+    setCurrentPassword('');
+    setNewPassword('');
+    setChangeSuccess(false);
+    setShowCurrentPassword(false);
+    setShowNewPassword(false);
+  };
+
+  const goToLogin = () => {
+    setMode('login');
+    setError('');
+    setPassword('');
+    setShowPassword(false);
   };
 
   const isBlocked = blockedFor > 0;
@@ -191,82 +239,244 @@ export function Login({ onLogin }) {
             {/* Desktop heading */}
             <div className="hidden lg:block text-left mb-8">
               <div className="flex items-center gap-2 mb-1">
-                <Sparkles size={18} className="text-cyan-400" />
-                <span className="text-cyan-400 text-xs font-medium uppercase tracking-wider">Panel de Administración</span>
+                {mode === 'login' ? (
+                  <Sparkles size={18} className="text-cyan-400" />
+                ) : (
+                  <KeyRound size={18} className="text-cyan-400" />
+                )}
+                <span className="text-cyan-400 text-xs font-medium uppercase tracking-wider">
+                  {mode === 'login' ? 'Panel de Administración' : 'Cambiar Contraseña'}
+                </span>
               </div>
-              <h1 className="text-2xl font-bold tracking-tight text-white">Bienvenido de vuelta</h1>
-              <p className="text-neutral-500 mt-1 text-sm">Ingresá tus credenciales para continuar</p>
+              <h1 className="text-2xl font-bold tracking-tight text-white">
+                {mode === 'login' ? 'Bienvenido de vuelta' : 'Cambiar contraseña'}
+              </h1>
+              <p className="text-neutral-500 mt-1 text-sm">
+                {mode === 'login' ? 'Ingresá tus credenciales para continuar' : 'Ingresá tu usuario y contraseña actual'}
+              </p>
             </div>
 
-            <motion.form
-              onSubmit={handleSubmit}
-              className="space-y-5"
-              animate={error ? { x: [0, -8, 8, -8, 8, 0] } : {}}
-              transition={{ duration: 0.4 }}
-            >
-              <AnimatePresence>
-                {error && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0, y: -10 }}
-                    animate={{ opacity: 1, height: 'auto', y: 0 }}
-                    exit={{ opacity: 0, height: 0, y: -10 }}
-                    className="overflow-hidden"
-                  >
-                    <div className={`border rounded-xl px-4 py-3 text-sm backdrop-blur-sm ${
-                      isBlocked
-                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                        : 'bg-red-500/10 text-red-400 border-red-500/20'
-                    }`}>
-                      {error}
-                      {isBlocked && (
-                        <div className="mt-2 font-semibold tabular-nums">
-                          Esperá {blockedFor}s para intentar de nuevo
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <div className="space-y-4">
-                <Input
-                  label="Usuario"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Ingresá tu usuario"
-                  required
-                  autoFocus
-                  disabled={isBlocked}
-                  className="bg-white/5 border-white/10 text-white placeholder:text-neutral-500 focus-visible:ring-cyan-500/40 focus-visible:border-cyan-500/40 rounded-xl h-12"
-                  labelClassName="text-neutral-400 text-xs uppercase tracking-wider"
-                />
-                <Input
-                  label="Contraseña"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Ingresá tu contraseña"
-                  required
-                  disabled={isBlocked}
-                  className="bg-white/5 border-white/10 text-white placeholder:text-neutral-500 focus-visible:ring-cyan-500/40 focus-visible:border-cyan-500/40 rounded-xl h-12"
-                  labelClassName="text-neutral-400 text-xs uppercase tracking-wider"
-                />
+            {/* Mobile heading for change password */}
+            {mode === 'changePassword' && (
+              <div className="lg:hidden text-center mb-6">
+                <KeyRound size={24} className="text-cyan-400 mx-auto mb-2" />
+                <h2 className="text-xl font-bold text-white">Cambiar contraseña</h2>
               </div>
+            )}
 
-              <motion.div
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <Button
-                  type="submit"
-                  className="w-full login-btn-glow bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-400 hover:to-teal-400 text-white border-0 rounded-xl h-12 font-semibold text-base shadow-lg shadow-cyan-500/20"
-                  size="lg"
-                  disabled={loading || isBlocked}
+            <AnimatePresence mode="wait">
+              {mode === 'login' ? (
+                <motion.form
+                  key="login"
+                  onSubmit={handleSubmit}
+                  className="space-y-5"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.3 }}
                 >
-                  {isBlocked ? `Bloqueado (${blockedFor}s)` : loading ? 'Ingresando...' : 'Iniciar sesión'}
-                </Button>
-              </motion.div>
-            </motion.form>
+                  <AnimatePresence>
+                    {error && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0, y: -10 }}
+                        animate={{ opacity: 1, height: 'auto', y: 0 }}
+                        exit={{ opacity: 0, height: 0, y: -10 }}
+                        className="overflow-hidden"
+                      >
+                        <div className={`border rounded-xl px-4 py-3 text-sm backdrop-blur-sm ${
+                          isBlocked
+                            ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                            : 'bg-red-500/10 text-red-400 border-red-500/20'
+                        }`}>
+                          {error}
+                          {isBlocked && (
+                            <div className="mt-2 font-semibold tabular-nums">
+                              Esperá {blockedFor}s para intentar de nuevo
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <div className="space-y-4">
+                    <Input
+                      label="Usuario"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder="Ingresá tu usuario"
+                      required
+                      autoFocus
+                      disabled={isBlocked}
+                      className="bg-white/5 border-white/10 text-white placeholder:text-neutral-500 focus-visible:ring-cyan-500/40 focus-visible:border-cyan-500/40 rounded-xl h-12"
+                      labelClassName="text-neutral-400 text-xs uppercase tracking-wider"
+                    />
+                    <div className="space-y-2">
+                      <label className="text-neutral-400 text-xs uppercase tracking-wider text-sm font-medium">Contraseña</label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="Ingresá tu contraseña"
+                          required
+                          disabled={isBlocked}
+                          className="flex h-12 w-full rounded-xl border px-4 pr-12 text-base transition-colors file:border-0 file:bg-transparent placeholder:text-neutral-500 focus-visible:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 bg-white/5 border-white/10 text-white focus-visible:ring-cyan-500/40 focus-visible:border-cyan-500/40"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300 transition-colors"
+                          tabIndex={-1}
+                        >
+                          {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <motion.div
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <Button
+                      type="submit"
+                      className="w-full login-btn-glow bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-400 hover:to-teal-400 text-white border-0 rounded-xl h-12 font-semibold text-base shadow-lg shadow-cyan-500/20"
+                      size="lg"
+                      disabled={loading || isBlocked}
+                    >
+                      {isBlocked ? `Bloqueado (${blockedFor}s)` : loading ? 'Ingresando...' : 'Iniciar sesión'}
+                    </Button>
+                  </motion.div>
+
+                  <button
+                    type="button"
+                    onClick={goToChangePassword}
+                    className="w-full text-center text-sm text-cyan-400/60 hover:text-cyan-400 transition-colors mt-2"
+                  >
+                    ¿Querés cambiar tu contraseña?
+                  </button>
+                </motion.form>
+              ) : (
+                <motion.div
+                  key="changePassword"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  transition={{ duration: 0.3 }}
+                  className="space-y-5"
+                >
+                  {changeSuccess ? (
+                    <div className="space-y-5">
+                      <div className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl px-4 py-3 text-sm">
+                        Contraseña cambiada correctamente. Ya podés iniciar sesión con tu nueva contraseña.
+                      </div>
+                      <Button
+                        onClick={goToLogin}
+                        className="w-full bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-400 hover:to-teal-400 text-white border-0 rounded-xl h-12 font-semibold text-base"
+                      >
+                        Volver a iniciar sesión
+                      </Button>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleChangePassword} className="space-y-5">
+                      <AnimatePresence>
+                        {error && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0, y: -10 }}
+                            animate={{ opacity: 1, height: 'auto', y: 0 }}
+                            exit={{ opacity: 0, height: 0, y: -10 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="bg-red-500/10 text-red-400 border border-red-500/20 rounded-xl px-4 py-3 text-sm">
+                              {error}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
+                      <div className="space-y-4">
+                        <Input
+                          label="Usuario"
+                          value={username}
+                          onChange={(e) => setUsername(e.target.value)}
+                          placeholder="Ingresá tu usuario"
+                          required
+                          autoFocus
+                          className="bg-white/5 border-white/10 text-white placeholder:text-neutral-500 focus-visible:ring-cyan-500/40 focus-visible:border-cyan-500/40 rounded-xl h-12"
+                          labelClassName="text-neutral-400 text-xs uppercase tracking-wider"
+                        />
+                        <div className="space-y-2">
+                          <label className="text-neutral-400 text-xs uppercase tracking-wider text-sm font-medium">Contraseña actual</label>
+                          <div className="relative">
+                            <input
+                              type={showCurrentPassword ? 'text' : 'password'}
+                              value={currentPassword}
+                              onChange={(e) => setCurrentPassword(e.target.value)}
+                              placeholder="Ingresá tu contraseña actual"
+                              required
+                              className="flex h-12 w-full rounded-xl border px-4 pr-12 text-base transition-colors placeholder:text-neutral-500 focus-visible:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 bg-white/5 border-white/10 text-white focus-visible:ring-cyan-500/40 focus-visible:border-cyan-500/40"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300 transition-colors"
+                              tabIndex={-1}
+                            >
+                              {showCurrentPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-neutral-400 text-xs uppercase tracking-wider text-sm font-medium">Nueva contraseña</label>
+                          <div className="relative">
+                            <input
+                              type={showNewPassword ? 'text' : 'password'}
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                              placeholder="Ingresá tu nueva contraseña"
+                              required
+                              minLength={4}
+                              className="flex h-12 w-full rounded-xl border px-4 pr-12 text-base transition-colors placeholder:text-neutral-500 focus-visible:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 bg-white/5 border-white/10 text-white focus-visible:ring-cyan-500/40 focus-visible:border-cyan-500/40"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowNewPassword(!showNewPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300 transition-colors"
+                              tabIndex={-1}
+                            >
+                              {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <Button
+                        type="submit"
+                        className="w-full bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-400 hover:to-teal-400 text-white border-0 rounded-xl h-12 font-semibold text-base"
+                        disabled={loading}
+                      >
+                        {loading ? 'Cambiando...' : 'Cambiar contraseña'}
+                      </Button>
+
+                      <button
+                        type="button"
+                        onClick={goToLogin}
+                        className="w-full flex items-center justify-center gap-2 text-sm text-cyan-400/60 hover:text-cyan-400 transition-colors"
+                      >
+                        <ArrowLeft size={14} />
+                        Volver al inicio de sesión
+                      </button>
+
+                      <div className="border border-white/5 rounded-xl px-4 py-3 text-xs text-neutral-500 mt-4">
+                        <p className="font-medium text-neutral-400 mb-1">¿No recordás tu contraseña?</p>
+                        <p>Contactá al administrador del sistema para que te la resetee desde el panel.</p>
+                      </div>
+                    </form>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <p className="text-center text-xs text-white/20 mt-8 lg:hidden">
               &copy; {new Date().getFullYear()} DentalPanel
