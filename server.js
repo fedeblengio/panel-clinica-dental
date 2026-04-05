@@ -43,7 +43,7 @@ const pool = new Pool({
 
 app.use(express.json());
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'clinica-dental-secret-key-change-me',
+  secret: process.env.SESSION_SECRET || 'tmp-dev-secret-change-in-production',
   resave: false,
   saveUninitialized: false,
   cookie: { maxAge: 8 * 60 * 60 * 1000 }
@@ -253,7 +253,7 @@ async function initDB() {
     const userCount = await pool.query('SELECT COUNT(*) FROM usuarios');
     if (parseInt(userCount.rows[0].count) === 0) {
       const adminUser = process.env.ADMIN_USER || 'admin';
-      const adminPass = process.env.ADMIN_PASS || 'clinica123';
+      const adminPass = process.env.ADMIN_PASS || 'AdminTemp1';  // Cambiar en producción via ADMIN_PASS env var
       const hash = bcrypt.hashSync(adminPass, 10);
       await pool.query(
         `INSERT INTO usuarios (username, password_hash, nombre, rol, clinica_id)
@@ -352,7 +352,9 @@ app.post('/api/logout', (req, res) => {
 app.post('/api/change-password', requireAuth, async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Faltan campos' });
-  if (newPassword.length < 4) return res.status(400).json({ error: 'La contraseña debe tener al menos 4 caracteres' });
+  if (newPassword.length < 8) return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
+  if (!/[A-Z]/.test(newPassword)) return res.status(400).json({ error: 'La contraseña debe tener al menos una mayúscula' });
+  if (!/[0-9]/.test(newPassword)) return res.status(400).json({ error: 'La contraseña debe tener al menos un número' });
   try {
     const result = await pool.query('SELECT password_hash FROM usuarios WHERE id = $1', [req.session.userId]);
     if (!result.rows[0] || !bcrypt.compareSync(currentPassword, result.rows[0].password_hash)) {
@@ -431,7 +433,9 @@ app.post('/api/forgot-password/send-code', async (req, res) => {
 app.post('/api/forgot-password/verify', async (req, res) => {
   const { username, code, newPassword } = req.body;
   if (!username || !code || !newPassword) return res.status(400).json({ error: 'Faltan campos' });
-  if (newPassword.length < 4) return res.status(400).json({ error: 'La contraseña debe tener al menos 4 caracteres' });
+  if (newPassword.length < 8) return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
+  if (!/[A-Z]/.test(newPassword)) return res.status(400).json({ error: 'La contraseña debe tener al menos una mayúscula' });
+  if (!/[0-9]/.test(newPassword)) return res.status(400).json({ error: 'La contraseña debe tener al menos un número' });
 
   const entry = resetCodes.get(username);
   if (!entry) return res.status(400).json({ error: 'No hay código pendiente. Solicitá uno nuevo.' });
@@ -1368,6 +1372,9 @@ app.get('/api/admin/usuarios', requireAuth, requireSuperAdmin, async (req, res) 
 app.post('/api/admin/usuarios', requireAuth, requireSuperAdmin, async (req, res) => {
   try {
     const { username, password, nombre, rol, clinica_id, telefono } = req.body;
+    if (!password || password.length < 8) return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
+    if (!/[A-Z]/.test(password)) return res.status(400).json({ error: 'La contraseña debe tener al menos una mayúscula' });
+    if (!/[0-9]/.test(password)) return res.status(400).json({ error: 'La contraseña debe tener al menos un número' });
     const hash = bcrypt.hashSync(password, 10);
     const result = await pool.query(
       'INSERT INTO usuarios (username, password_hash, nombre, rol, clinica_id, telefono) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, username, nombre, rol, clinica_id, telefono',
@@ -1384,6 +1391,9 @@ app.put('/api/admin/usuarios/:id', requireAuth, requireSuperAdmin, async (req, r
   try {
     const { username, password, nombre, rol, clinica_id, activo, telefono } = req.body;
     if (password) {
+      if (password.length < 8) return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
+      if (!/[A-Z]/.test(password)) return res.status(400).json({ error: 'La contraseña debe tener al menos una mayúscula' });
+      if (!/[0-9]/.test(password)) return res.status(400).json({ error: 'La contraseña debe tener al menos un número' });
       const hash = bcrypt.hashSync(password, 10);
       await pool.query(
         'UPDATE usuarios SET username=$1, password_hash=$2, nombre=$3, rol=$4, clinica_id=$5, activo=$6, telefono=$7 WHERE id=$8',
