@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Users, CalendarDays, MessageSquare, Settings, HelpCircle, LogOut, Sun, Moon, Menu, X, Shield, Activity, User } from 'lucide-react';
+import { LayoutDashboard, Users, CalendarDays, MessageSquare, Settings, HelpCircle, LogOut, Sun, Moon, Menu, X, Shield, Activity, User, AlertTriangle } from 'lucide-react';
 import { useTheme } from '../lib/useTheme';
 import { NotificacionesBell } from './Notificaciones';
 
@@ -28,6 +28,7 @@ export function Layout({ children, onLogout, user }) {
     { to: '/pacientes', icon: Users, label: 'Pacientes' },
     { to: '/citas', icon: CalendarDays, label: 'Citas' },
     { to: '/conversaciones', icon: MessageSquare, label: 'Conversaciones' },
+    { to: '/escalaciones', icon: AlertTriangle, label: 'Escalaciones' },
     { to: '/mi-cuenta', icon: User, label: 'Mi Cuenta' },
     { to: '/configuracion', icon: Settings, label: 'Configuración' },
     { to: '/ayuda', icon: HelpCircle, label: 'Ayuda' },

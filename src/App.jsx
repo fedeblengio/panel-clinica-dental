@@ -6,6 +6,7 @@ import { Dashboard } from './components/Dashboard';
 import { Pacientes } from './components/Pacientes';
 import { Citas } from './components/Citas';
 import { Conversaciones } from './components/Conversaciones';
+import { Escalaciones } from './components/Escalaciones';
 import { Configuracion } from './components/Configuracion';
 import { Ayuda } from './components/Ayuda';
 import { MiCuenta } from './components/MiCuenta';
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="/pacientes" element={<Pacientes />} />
           <Route path="/citas" element={<Citas />} />
           <Route path="/conversaciones" element={<Conversaciones />} />
+          <Route path="/escalaciones" element={<Escalaciones />} />
           <Route path="/mi-cuenta" element={<MiCuenta />} />
           <Route path="/configuracion" element={<Configuracion />} />
           <Route path="/ayuda" element={<Ayuda />} />
