@@ -45,14 +45,25 @@ export function Conversaciones() {
 
   useEffect(() => { loadData(); }, []);
 
-  const isEscalada = (sessionId) => escaladas.some(e => e.session_id === sessionId);
+  // escalaciones.session_id = phone only, conversations session_id = instance_phone
+  const extractPhone = (sessionId) => sessionId?.includes('_') ? sessionId.split('_').slice(1).join('_') : sessionId;
 
-  const getEscalacion = (sessionId) => escaladas.find(e => e.session_id === sessionId);
+  const isEscalada = (sessionId) => {
+    const phone = extractPhone(sessionId);
+    return escaladas.some(e => e.session_id === sessionId || e.session_id === phone);
+  };
+
+  const getEscalacion = (sessionId) => {
+    const phone = extractPhone(sessionId);
+    return escaladas.find(e => e.session_id === sessionId || e.session_id === phone);
+  };
 
   const cerrarEscalacion = async (sessionId) => {
+    const esc = getEscalacion(sessionId);
+    const escSessionId = esc?.session_id || extractPhone(sessionId);
     try {
-      await api(`/conversaciones/${encodeURIComponent(sessionId)}/cerrar-escalacion`, { method: 'POST' });
-      setEscaladas(prev => prev.filter(e => e.session_id !== sessionId));
+      await api(`/conversaciones/${encodeURIComponent(escSessionId)}/cerrar-escalacion`, { method: 'POST' });
+      setEscaladas(prev => prev.filter(e => e.session_id !== escSessionId));
     } catch (err) {
       console.error(err);
     }
