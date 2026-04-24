@@ -3,6 +3,7 @@ const session = require('express-session');
 const path = require('path');
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
+const PgSession = require('connect-pg-simple')(session);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,9 +15,15 @@ if (!EVOLUTION_API_KEY) {
   console.warn('WARNING: EVOLUTION_API_KEY not set. Evolution API features will not work.');
 }
 
-async function evolutionFetch(path, options = {}) {
-  const url = `${EVOLUTION_API_URL}${path}`;
+// Evolution API usa certificado autofirmado, bypass TLS SOLO durante sus llamadas
+async function evolutionFetch(evoPath, options = {}) {
+  const url = `${EVOLUTION_API_URL}${evoPath}`;
+  // Temporalmente desactivar verificación TLS solo para esta llamada
+  const originalTLS = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
   try {
+    if (url.startsWith('https')) {
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+    }
     const res = await fetch(url, {
       ...options,
       headers: {
@@ -24,29 +31,54 @@ async function evolutionFetch(path, options = {}) {
         'Content-Type': 'application/json',
         ...options.headers,
       },
-      // Skip SSL verification for self-signed certs
-      ...(url.startsWith('https') ? { dispatcher: undefined } : {}),
     });
     return await res.json();
   } catch (err) {
     console.error('Evolution API error:', err.message);
     return null;
+  } finally {
+    // Restaurar verificación TLS
+    if (originalTLS === undefined) {
+      delete process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+    } else {
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = originalTLS;
+    }
   }
 }
 
-// Allow self-signed certificates for Evolution API
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+// BOT API KEY para autenticar endpoints que usa n8n
+const BOT_API_KEY = process.env.BOT_API_KEY || '';
 
+if (!process.env.DATABASE_URL) {
+  console.error('ERROR FATAL: DATABASE_URL no está configurada. El servidor no puede arrancar sin base de datos.');
+  process.exit(1);
+}
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://humberto:@humberto_proyect_postgres_sql:5432/clinica'
+  connectionString: process.env.DATABASE_URL,
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '100kb' }));
+
+// Trust proxy para obtener IP real y que secure cookies funcionen detrás de reverse proxy
+app.set('trust proxy', 1);
+
+const isProduction = process.env.NODE_ENV === 'production';
 app.use(session({
+  store: new PgSession({
+    pool,
+    tableName: 'user_sessions',
+    createTableIfMissing: true,
+    pruneSessionInterval: 60 * 15, // limpiar sesiones expiradas cada 15 min
+  }),
   secret: process.env.SESSION_SECRET || 'tmp-dev-secret-change-in-production',
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: 8 * 60 * 60 * 1000 }
+  cookie: {
+    maxAge: 8 * 60 * 60 * 1000,
+    secure: isProduction,
+    httpOnly: true,
+    sameSite: 'lax',
+  }
 }));
 
 // --- RATE LIMITING ---
@@ -93,6 +125,40 @@ setInterval(() => {
   }
 }, 10 * 60 * 1000);
 
+// --- RATE LIMITING GENÉRICO POR IP (para endpoints públicos) ---
+const rateLimitStores = {};
+function createRateLimit(name, maxRequests, windowMs) {
+  rateLimitStores[name] = new Map();
+  // Limpiar entradas expiradas periódicamente
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, record] of rateLimitStores[name]) {
+      if (now > record.windowStart + windowMs) rateLimitStores[name].delete(key);
+    }
+  }, windowMs);
+
+  return (req, res, next) => {
+    const ip = req.ip || req.connection?.remoteAddress || 'unknown';
+    const now = Date.now();
+    const store = rateLimitStores[name];
+    let record = store.get(ip);
+    if (!record || now > record.windowStart + windowMs) {
+      record = { count: 0, windowStart: now };
+    }
+    record.count++;
+    store.set(ip, record);
+    if (record.count > maxRequests) {
+      return res.status(429).json({ error: 'Demasiadas solicitudes. Intentá de nuevo en unos minutos.' });
+    }
+    next();
+  };
+}
+
+// Rate limiters específicos
+const rateLimitForgotPassword = createRateLimit('forgot-password', 5, 60 * 1000); // 5 req/min
+const rateLimitBotConfig = createRateLimit('bot-config', 60, 60 * 1000); // 60 req/min (el bot lo usa frecuentemente)
+const rateLimitBotEndpoints = createRateLimit('bot-endpoints', 30, 60 * 1000); // 30 req/min
+
 // --- MIDDLEWARE ---
 function requireAuth(req, res, next) {
   if (req.session.authenticated) return next();
@@ -120,6 +186,19 @@ function requireClinica(req, res, next) {
 function requireSuperAdmin(req, res, next) {
   if (req.session.rol !== 'superadmin') {
     return res.status(403).json({ error: 'Acceso denegado' });
+  }
+  next();
+}
+
+function requireBotApiKey(req, res, next) {
+  if (!BOT_API_KEY) {
+    // Si no hay BOT_API_KEY configurada, permitir acceso (compatibilidad)
+    console.warn('WARNING: BOT_API_KEY no configurada. Endpoints del bot accesibles sin autenticación.');
+    return next();
+  }
+  const key = req.headers['x-bot-api-key'];
+  if (key !== BOT_API_KEY) {
+    return res.status(401).json({ error: 'API key del bot inválida o no proporcionada' });
   }
   next();
 }
@@ -221,6 +300,15 @@ async function initDB() {
     `).catch(() => {});
     console.log('Columnas clinica_id y trigger agregados');
 
+    // Índices para performance
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_pacientes_clinica ON pacientes(clinica_id)').catch(() => {});
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_citas_clinica_fecha ON citas(clinica_id, fecha_cita)').catch(() => {});
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_citas_paciente_tel ON citas(paciente_telefono)').catch(() => {});
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_chat_session ON n8n_chat_histories(session_id)').catch(() => {});
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_chat_clinica ON n8n_chat_histories(clinica_id)').catch(() => {});
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_config_clinica ON configuracion_clinica(clinica_id)').catch(() => {});
+    console.log('Índices de performance creados');
+
     // Create default clinic if none exists
     const clinicCount = await pool.query('SELECT COUNT(*) FROM clinicas');
     if (parseInt(clinicCount.rows[0].count) === 0) {
@@ -269,6 +357,16 @@ async function initDB() {
   }
 }
 initDB();
+
+// --- HEALTH CHECK ---
+app.get('/api/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ ok: true, db: 'connected', uptime: Math.floor(process.uptime()) });
+  } catch (err) {
+    res.status(503).json({ ok: false, db: 'disconnected' });
+  }
+});
 
 // --- AUTH ---
 app.get('/api/session', (req, res) => {
@@ -371,7 +469,7 @@ app.post('/api/change-password', requireAuth, async (req, res) => {
 // --- FORGOT PASSWORD (WhatsApp code) ---
 const resetCodes = new Map(); // key: username, value: { code, expires, attempts }
 
-app.post('/api/forgot-password/send-code', async (req, res) => {
+app.post('/api/forgot-password/send-code', rateLimitForgotPassword, async (req, res) => {
   const { username } = req.body;
   if (!username) return res.status(400).json({ error: 'Ingresá tu usuario' });
   try {
@@ -430,7 +528,7 @@ app.post('/api/forgot-password/send-code', async (req, res) => {
   }
 });
 
-app.post('/api/forgot-password/verify', async (req, res) => {
+app.post('/api/forgot-password/verify', rateLimitForgotPassword, async (req, res) => {
   const { username, code, newPassword } = req.body;
   if (!username || !code || !newPassword) return res.status(400).json({ error: 'Faltan campos' });
   if (newPassword.length < 8) return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
@@ -443,7 +541,16 @@ app.post('/api/forgot-password/verify', async (req, res) => {
     resetCodes.delete(username);
     return res.status(400).json({ error: 'El código expiró. Solicitá uno nuevo.' });
   }
-  if (entry.code !== code) return res.status(400).json({ error: 'Código incorrecto' });
+  // Limitar intentos de verificación (máx 5 por código)
+  if (entry.verifyAttempts >= 5) {
+    resetCodes.delete(username);
+    return res.status(429).json({ error: 'Demasiados intentos fallidos. Solicitá un nuevo código.' });
+  }
+  if (entry.code !== code) {
+    entry.verifyAttempts = (entry.verifyAttempts || 0) + 1;
+    const remaining = 5 - entry.verifyAttempts;
+    return res.status(400).json({ error: `Código incorrecto. Te quedan ${remaining} intentos.` });
+  }
 
   try {
     const hash = bcrypt.hashSync(newPassword, 10);
@@ -636,17 +743,20 @@ app.get('/api/whatsapp-status', requireAuth, requireClinica, async (req, res) =>
   }
 });
 
-// --- AUTO MARCAR NO ASISTIO ---
-app.post('/api/citas/auto-no-asistio', requireAuth, async (req, res) => {
+// --- AUTO MARCAR NO ASISTIO (scoped por clínica del usuario) ---
+app.post('/api/citas/auto-no-asistio', requireAuth, requireClinica, async (req, res) => {
   try {
+    const cid = req.clinicaId;
     const result = await pool.query(`
       UPDATE citas SET estado = 'No Asistio'
       WHERE estado IN ('Pendiente', 'Confirmada')
         AND fecha_cita < CURRENT_DATE
-        AND clinica_id IS NOT NULL
+        AND clinica_id = $1
       RETURNING id, paciente_nombre, fecha_cita, estado
-    `);
-    console.log(`Auto No Asistio: ${result.rowCount} citas actualizadas`);
+    `, [cid]);
+    if (result.rowCount > 0) {
+      console.log(`Auto No Asistio (clinica ${cid}): ${result.rowCount} citas actualizadas`);
+    }
     res.json({ actualizadas: result.rowCount, citas: result.rows });
   } catch (err) {
     console.error('Auto no-asistio error:', err);
@@ -705,17 +815,23 @@ app.put('/api/pacientes/:id', requireAuth, requireClinica, async (req, res) => {
 });
 
 app.delete('/api/pacientes/:id', requireAuth, requireClinica, async (req, res) => {
+  const client = await pool.connect();
   try {
     const cid = req.clinicaId;
-    await pool.query(
+    await client.query('BEGIN');
+    await client.query(
       'DELETE FROM citas WHERE paciente_telefono = (SELECT telefono FROM pacientes WHERE id = $1 AND clinica_id = $2) AND clinica_id = $2',
       [req.params.id, cid]
     );
-    await pool.query('DELETE FROM pacientes WHERE id = $1 AND clinica_id = $2', [req.params.id, cid]);
+    await client.query('DELETE FROM pacientes WHERE id = $1 AND clinica_id = $2', [req.params.id, cid]);
+    await client.query('COMMIT');
     res.json({ ok: true });
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error(err);
     res.status(400).json({ error: 'Error al eliminar paciente.' });
+  } finally {
+    client.release();
   }
 });
 
@@ -744,6 +860,16 @@ app.post('/api/citas', requireAuth, requireClinica, async (req, res) => {
   try {
     const cid = req.clinicaId;
     const { paciente_telefono, fecha_cita, hora_cita, tipo_cita, estado, notas } = req.body;
+
+    // Prevenir doble-booking: verificar que no exista cita en la misma fecha/hora/clínica
+    const existing = await pool.query(
+      `SELECT id FROM citas WHERE fecha_cita = $1 AND hora_cita = $2 AND clinica_id = $3 AND estado NOT IN ('Cancelada', 'No Asistio')`,
+      [fecha_cita, hora_cita, cid]
+    );
+    if (existing.rows.length > 0) {
+      return res.status(409).json({ error: 'Ya existe una cita en esa fecha y hora. Elegí otro horario.' });
+    }
+
     const paciente = await pool.query(
       'SELECT nombre FROM pacientes WHERE telefono = $1 AND clinica_id = $2', [paciente_telefono, cid]
     );
@@ -790,7 +916,7 @@ app.delete('/api/citas/:id', requireAuth, requireClinica, async (req, res) => {
 });
 
 // --- CONFIGURACION PUBLICA (para n8n bot) ---
-app.get('/api/configuracion/bot', async (req, res) => {
+app.get('/api/configuracion/bot', rateLimitBotConfig, async (req, res) => {
   try {
     const instanceName = req.query.instance;
     if (!instanceName) {
@@ -819,7 +945,7 @@ app.get('/api/configuracion/bot', async (req, res) => {
 });
 
 // --- n8n: registrar sesion de chat con clinica ---
-app.post('/api/bot/register-session', async (req, res) => {
+app.post('/api/bot/register-session', rateLimitBotEndpoints, requireBotApiKey, async (req, res) => {
   try {
     const { instance, session_id } = req.body;
     if (!instance || !session_id) {
@@ -850,7 +976,7 @@ app.post('/api/bot/register-session', async (req, res) => {
 });
 
 // --- n8n: asignar clinica_id a chat histories periodicamente ---
-app.post('/api/bot/sync-chat-clinicas', async (req, res) => {
+app.post('/api/bot/sync-chat-clinicas', rateLimitBotEndpoints, requireBotApiKey, async (req, res) => {
   try {
     // Assign clinica_id to chat histories based on matching patient phone numbers
     const updated = await pool.query(`
@@ -1103,12 +1229,13 @@ app.put('/api/admin/clinicas/:id', requireAuth, requireSuperAdmin, async (req, r
 
 // Reset clinic data (superadmin only)
 app.post('/api/admin/clinicas/:id/reset-data', requireAuth, requireSuperAdmin, async (req, res) => {
+  const client = await pool.connect();
   try {
     const clinicaId = req.params.id;
     const { confirm_nombre, borrar_pacientes, borrar_citas, borrar_chat, borrar_config } = req.body;
 
     // Verify clinic exists
-    const clinica = await pool.query('SELECT id, nombre FROM clinicas WHERE id = $1', [clinicaId]);
+    const clinica = await client.query('SELECT id, nombre FROM clinicas WHERE id = $1', [clinicaId]);
     if (!clinica.rows[0]) return res.status(404).json({ error: 'Clínica no encontrada' });
 
     // Verify confirmation matches clinic name
@@ -1118,30 +1245,36 @@ app.post('/api/admin/clinicas/:id/reset-data', requireAuth, requireSuperAdmin, a
 
     const stats = { chat: 0, citas: 0, pacientes: 0, configuracion: 0 };
 
+    await client.query('BEGIN');
+
     // Delete in correct order (respecting dependencies)
     if (borrar_chat) {
-      const r = await pool.query('DELETE FROM n8n_chat_histories WHERE clinica_id = $1', [clinicaId]);
+      const r = await client.query('DELETE FROM n8n_chat_histories WHERE clinica_id = $1', [clinicaId]);
       stats.chat = r.rowCount;
     }
     // Always delete citas if deleting pacientes (avoid orphaned records)
     if (borrar_citas || borrar_pacientes) {
-      const r = await pool.query('DELETE FROM citas WHERE clinica_id = $1', [clinicaId]);
+      const r = await client.query('DELETE FROM citas WHERE clinica_id = $1', [clinicaId]);
       stats.citas = r.rowCount;
     }
     if (borrar_pacientes) {
-      const r = await pool.query('DELETE FROM pacientes WHERE clinica_id = $1', [clinicaId]);
+      const r = await client.query('DELETE FROM pacientes WHERE clinica_id = $1', [clinicaId]);
       stats.pacientes = r.rowCount;
     }
     if (borrar_config) {
-      const r = await pool.query('DELETE FROM configuracion_clinica WHERE clinica_id = $1', [clinicaId]);
+      const r = await client.query('DELETE FROM configuracion_clinica WHERE clinica_id = $1', [clinicaId]);
       stats.configuracion = r.rowCount;
     }
 
+    await client.query('COMMIT');
     console.log(`Reset data clinica ${clinicaId} (${clinica.rows[0].nombre}):`, stats);
     res.json({ ok: true, deleted: stats });
   } catch (err) {
+    await client.query('ROLLBACK');
     console.error('Reset clinic data error:', err);
     res.status(500).json({ error: 'Error al reiniciar datos de clínica' });
+  } finally {
+    client.release();
   }
 });
 
@@ -1167,7 +1300,7 @@ app.get('/api/admin/clinicas/:id/qrcode', requireAuth, requireSuperAdmin, async 
     res.json(result);
   } catch (err) {
     console.error('QR error:', err);
-    res.status(500).json({ error: 'Error interno al obtener QR: ' + err.message });
+    res.status(500).json({ error: 'Error interno al obtener QR. Intentá de nuevo.' });
   }
 });
 
@@ -1437,6 +1570,25 @@ async function autoMarcarNoAsistio() {
 setInterval(autoMarcarNoAsistio, 60 * 60 * 1000); // cada hora
 setTimeout(autoMarcarNoAsistio, 15000); // 15s después de iniciar
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Panel Clínica Dental corriendo en puerto ${PORT}`);
 });
+
+// --- GRACEFUL SHUTDOWN ---
+function gracefulShutdown(signal) {
+  console.log(`${signal} recibido. Cerrando servidor...`);
+  server.close(() => {
+    console.log('Servidor HTTP cerrado.');
+    pool.end(() => {
+      console.log('Pool de DB cerrado.');
+      process.exit(0);
+    });
+  });
+  // Forzar cierre si no termina en 10 segundos
+  setTimeout(() => {
+    console.error('Cierre forzado por timeout');
+    process.exit(1);
+  }, 10000);
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
