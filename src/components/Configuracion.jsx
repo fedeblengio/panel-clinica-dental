@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Input, Textarea } from './ui/input';
-import { Save, Plus, Trash2, Building2, Bot } from 'lucide-react';
+import { Save, Plus, Trash2, Building2, Bot, Phone } from 'lucide-react';
 import { api } from '../lib/utils';
 
 const DIAS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
@@ -23,6 +23,7 @@ export function Configuracion() {
     servicios: [],
     mensaje_bienvenida: '',
     prompt_sistema: '',
+    telefono_notificaciones: '',
   });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -42,6 +43,7 @@ export function Configuracion() {
           servicios: data.servicios || [],
           mensaje_bienvenida: data.mensaje_bienvenida || '',
           prompt_sistema: data.prompt_sistema || '',
+          telefono_notificaciones: data.telefono_notificaciones || '',
         });
       }
     }).catch(console.error);
@@ -120,6 +122,14 @@ export function Configuracion() {
               <Input label="Dirección" value={form.direccion} onChange={e => setForm({ ...form, direccion: e.target.value })} placeholder="Av. España 1234, Asunción" />
               <Input label="Teléfono" value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} placeholder="0981123456" />
               <Input label="Email" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="clinica@email.com" />
+            </div>
+            <div className="mt-4 p-4 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10">
+              <div className="flex items-center gap-2 mb-2">
+                <Phone size={16} className="text-amber-600 dark:text-amber-400" />
+                <span className="text-sm font-medium text-amber-700 dark:text-amber-400">Notificaciones de escalación</span>
+              </div>
+              <Input label="Teléfono de la recepcionista (para avisos del bot)" value={form.telefono_notificaciones} onChange={e => setForm({ ...form, telefono_notificaciones: e.target.value })} placeholder="595981123456" />
+              <p className="text-xs text-muted-foreground mt-1">Cuando un paciente pida hablar con una persona, el bot enviará un mensaje a este número con el resumen del problema.</p>
             </div>
             <div className="mt-4">
               <Textarea label="Mensaje de bienvenida personalizado" value={form.mensaje_bienvenida} onChange={e => setForm({ ...form, mensaje_bienvenida: e.target.value })} placeholder="Mensaje que el bot usa al saludar (opcional)" />

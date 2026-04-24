@@ -1135,7 +1135,7 @@ app.get('/api/configuracion', requireAuth, requireClinica, async (req, res) => {
 app.put('/api/configuracion', requireAuth, requireClinica, async (req, res) => {
   try {
     const cid = req.clinicaId;
-    const { nombre_clinica, direccion, telefono, email, nombre_bot, horarios, servicios, mensaje_bienvenida, prompt_sistema } = req.body;
+    const { nombre_clinica, direccion, telefono, email, nombre_bot, horarios, servicios, mensaje_bienvenida, prompt_sistema, telefono_notificaciones } = req.body;
 
     const existing = await pool.query('SELECT id FROM configuracion_clinica WHERE clinica_id = $1', [cid]);
     if (existing.rows.length > 0) {
@@ -1143,23 +1143,23 @@ app.put('/api/configuracion', requireAuth, requireClinica, async (req, res) => {
         UPDATE configuracion_clinica SET
           nombre_clinica = $1, direccion = $2, telefono = $3, email = $4,
           nombre_bot = $5, horarios = $6, servicios = $7,
-          mensaje_bienvenida = $8, prompt_sistema = $9, updated_at = NOW()
-        WHERE clinica_id = $10
+          mensaje_bienvenida = $8, prompt_sistema = $9, telefono_notificaciones = $10, updated_at = NOW()
+        WHERE clinica_id = $11
       `, [
         nombre_clinica || '', direccion || '', telefono || '', email || '',
         nombre_bot || 'Sofía', JSON.stringify(horarios || {}),
         JSON.stringify(servicios || []), mensaje_bienvenida || '',
-        prompt_sistema || '', cid
+        prompt_sistema || '', telefono_notificaciones || '', cid
       ]);
     } else {
       await pool.query(`
-        INSERT INTO configuracion_clinica (nombre_clinica, direccion, telefono, email, nombre_bot, horarios, servicios, mensaje_bienvenida, prompt_sistema, clinica_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        INSERT INTO configuracion_clinica (nombre_clinica, direccion, telefono, email, nombre_bot, horarios, servicios, mensaje_bienvenida, prompt_sistema, telefono_notificaciones, clinica_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       `, [
         nombre_clinica || '', direccion || '', telefono || '', email || '',
         nombre_bot || 'Sofía', JSON.stringify(horarios || {}),
         JSON.stringify(servicios || []), mensaje_bienvenida || '',
-        prompt_sistema || '', cid
+        prompt_sistema || '', telefono_notificaciones || '', cid
       ]);
     }
     res.json({ ok: true });
