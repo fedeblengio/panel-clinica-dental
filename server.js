@@ -276,6 +276,22 @@ async function initDB() {
     await pool.query(`ALTER TABLE citas ADD COLUMN IF NOT EXISTS recordatorio_24h BOOLEAN DEFAULT false`).catch(() => {});
     await pool.query(`ALTER TABLE citas ADD COLUMN IF NOT EXISTS recordatorio_1h BOOLEAN DEFAULT false`).catch(() => {});
 
+    // Escalación a humano
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS escalaciones (
+        id SERIAL PRIMARY KEY,
+        session_id VARCHAR(255) NOT NULL,
+        clinica_id INTEGER REFERENCES clinicas(id),
+        activa BOOLEAN DEFAULT true,
+        resumen TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT NOW(),
+        cerrada_at TIMESTAMP
+      )
+    `).catch(() => {});
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_escalaciones_session ON escalaciones(session_id, activa)').catch(() => {});
+    await pool.query(`ALTER TABLE configuracion_clinica ADD COLUMN IF NOT EXISTS telefono_notificaciones VARCHAR(50) DEFAULT ''`).catch(() => {});
+    console.log('Tabla escalaciones lista');
+
     // DB trigger: auto-assign clinica_id to new chat messages based on patient's clinica
     await pool.query(`
       CREATE OR REPLACE FUNCTION auto_set_chat_clinica()
@@ -991,6 +1007,115 @@ app.post('/api/bot/sync-chat-clinicas', rateLimitBotEndpoints, requireBotApiKey,
   } catch (err) {
     console.error('Sync chat clinicas error:', err);
     res.status(500).json({ error: 'Error interno' });
+  }
+});
+
+// --- ESCALACIÓN A HUMANO ---
+
+// n8n consulta si una conversación está escalada
+app.get('/api/bot/escalacion-activa', rateLimitBotConfig, async (req, res) => {
+  try {
+    const { session_id, instance } = req.query;
+    if (!session_id || !instance) {
+      return res.status(400).json({ error: 'session_id e instance requeridos' });
+    }
+    const clinica = await pool.query('SELECT id FROM clinicas WHERE instance_name = $1', [instance]);
+    const clinicaId = clinica.rows[0]?.id;
+    if (!clinicaId) return res.json({ escalada: false });
+
+    const result = await pool.query(
+      'SELECT id FROM escalaciones WHERE session_id = $1 AND clinica_id = $2 AND activa = true LIMIT 1',
+      [session_id, clinicaId]
+    );
+    // Auto-desescalar después de 2 horas
+    if (result.rows.length > 0) {
+      const autoClose = await pool.query(
+        `UPDATE escalaciones SET activa = false, cerrada_at = NOW()
+         WHERE session_id = $1 AND clinica_id = $2 AND activa = true
+           AND created_at < NOW() - INTERVAL '2 hours' RETURNING id`,
+        [session_id, clinicaId]
+      );
+      if (autoClose.rowCount > 0) {
+        return res.json({ escalada: false, auto_cerrada: true });
+      }
+    }
+    res.json({ escalada: result.rows.length > 0 });
+  } catch (err) {
+    console.error('Escalacion check error:', err);
+    res.json({ escalada: false });
+  }
+});
+
+// n8n activa una escalación
+app.post('/api/bot/escalar', rateLimitBotEndpoints, requireBotApiKey, async (req, res) => {
+  try {
+    const { session_id, instance, resumen } = req.body;
+    if (!session_id || !instance) {
+      return res.status(400).json({ error: 'session_id e instance requeridos' });
+    }
+    const clinica = await pool.query('SELECT id FROM clinicas WHERE instance_name = $1', [instance]);
+    const clinicaId = clinica.rows[0]?.id;
+    if (!clinicaId) return res.status(404).json({ error: 'Clínica no encontrada' });
+
+    // Verificar si ya está escalada
+    const existing = await pool.query(
+      'SELECT id FROM escalaciones WHERE session_id = $1 AND clinica_id = $2 AND activa = true LIMIT 1',
+      [session_id, clinicaId]
+    );
+    if (existing.rows.length > 0) {
+      return res.json({ ok: true, ya_escalada: true });
+    }
+
+    await pool.query(
+      'INSERT INTO escalaciones (session_id, clinica_id, resumen) VALUES ($1, $2, $3)',
+      [session_id, clinicaId, resumen || '']
+    );
+
+    // Obtener teléfono de notificaciones
+    const config = await pool.query(
+      'SELECT telefono_notificaciones FROM configuracion_clinica WHERE clinica_id = $1',
+      [clinicaId]
+    );
+    const telefonoAdmin = config.rows[0]?.telefono_notificaciones || '';
+
+    res.json({ ok: true, telefono_notificaciones: telefonoAdmin });
+  } catch (err) {
+    console.error('Escalar error:', err);
+    res.status(500).json({ error: 'Error al escalar' });
+  }
+});
+
+// Panel: ver conversaciones escaladas
+app.get('/api/conversaciones/escaladas', requireAuth, requireClinica, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT e.id, e.session_id, e.resumen, e.created_at,
+              p.nombre as paciente_nombre
+       FROM escalaciones e
+       LEFT JOIN pacientes p ON p.telefono = e.session_id AND p.clinica_id = e.clinica_id
+       WHERE e.clinica_id = $1 AND e.activa = true
+       ORDER BY e.created_at DESC`,
+      [req.clinicaId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Escaladas error:', err);
+    res.json([]);
+  }
+});
+
+// Panel: cerrar escalación (devolver al bot)
+app.post('/api/conversaciones/:sessionId/cerrar-escalacion', requireAuth, requireClinica, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `UPDATE escalaciones SET activa = false, cerrada_at = NOW()
+       WHERE session_id = $1 AND clinica_id = $2 AND activa = true`,
+      [req.params.sessionId, req.clinicaId]
+    );
+    res.json({ ok: true, cerradas: result.rowCount });
+  } catch (err) {
+    console.error('Cerrar escalacion error:', err);
+    res.status(500).json({ error: 'Error al cerrar escalación' });
   }
 });
 

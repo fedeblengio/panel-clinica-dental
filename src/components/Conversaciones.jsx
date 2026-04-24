@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
-import { MessageSquare, ArrowLeft, User, Bot } from 'lucide-react';
+import { MessageSquare, ArrowLeft, User, Bot, AlertTriangle, UserCheck } from 'lucide-react';
 import { api } from '../lib/utils';
 
 function ChatBubble({ message, role, index = 0 }) {
@@ -30,12 +30,33 @@ export function Conversaciones() {
   const [selected, setSelected] = useState(null);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [escaladas, setEscaladas] = useState([]);
 
-  useEffect(() => {
-    api('/conversaciones')
-      .then(data => { setConversations(data); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, []);
+  const loadData = () => {
+    Promise.all([
+      api('/conversaciones'),
+      api('/conversaciones/escaladas'),
+    ]).then(([convs, esc]) => {
+      setConversations(convs);
+      setEscaladas(esc);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  };
+
+  useEffect(() => { loadData(); }, []);
+
+  const isEscalada = (sessionId) => escaladas.some(e => e.session_id === sessionId);
+
+  const getEscalacion = (sessionId) => escaladas.find(e => e.session_id === sessionId);
+
+  const cerrarEscalacion = async (sessionId) => {
+    try {
+      await api(`/conversaciones/${encodeURIComponent(sessionId)}/cerrar-escalacion`, { method: 'POST' });
+      setEscaladas(prev => prev.filter(e => e.session_id !== sessionId));
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const openChat = async (sessionId) => {
     setSelected(sessionId);
@@ -66,10 +87,22 @@ export function Conversaciones() {
             <Button variant="ghost" size="icon" onClick={() => { setSelected(null); setMessages([]); }}>
               <ArrowLeft size={20} />
             </Button>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">{formatPhone(selected)}</h1>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold tracking-tight">{formatPhone(selected)}</h1>
+                {isEscalada(selected) && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2.5 py-1 text-xs font-medium">
+                    <AlertTriangle size={12} /> Escalado
+                  </span>
+                )}
+              </div>
               <p className="text-muted-foreground text-sm">{messages.length} mensajes</p>
             </div>
+            {isEscalada(selected) && (
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => cerrarEscalacion(selected)}>
+                <UserCheck size={14} /> Devolver al bot
+              </Button>
+            )}
           </motion.div>
 
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
@@ -109,12 +142,24 @@ export function Conversaciones() {
                       onClick={() => openChat(c.session_id)}
                       className="w-full flex items-center gap-4 p-4 sm:p-5 hover:bg-muted/50 transition-colors text-left"
                     >
-                      <div className="h-11 w-11 rounded-full bg-secondary flex items-center justify-center shrink-0">
-                        <MessageSquare size={18} className="text-muted-foreground" />
+                      <div className={`h-11 w-11 rounded-full flex items-center justify-center shrink-0 ${isEscalada(c.session_id) ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-secondary'}`}>
+                        {isEscalada(c.session_id)
+                          ? <AlertTriangle size={18} className="text-amber-600 dark:text-amber-400" />
+                          : <MessageSquare size={18} className="text-muted-foreground" />
+                        }
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium">{formatPhone(c.session_id)}</p>
-                        <p className="text-sm text-muted-foreground truncate">{c.ultimo_mensaje || 'Sin mensajes'}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium">{formatPhone(c.session_id)}</p>
+                          {isEscalada(c.session_id) && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2 py-0.5 text-xs font-medium">
+                              Escalado
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground truncate">
+                          {isEscalada(c.session_id) ? getEscalacion(c.session_id)?.resumen || c.ultimo_mensaje : c.ultimo_mensaje || 'Sin mensajes'}
+                        </p>
                       </div>
                       <div className="text-right shrink-0">
                         <span className="inline-flex items-center rounded-full bg-secondary px-2.5 py-1 text-xs font-medium">
