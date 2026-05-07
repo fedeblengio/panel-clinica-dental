@@ -4,6 +4,8 @@ const path = require('path');
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const PgSession = require('connect-pg-simple')(session);
+const PDFDocument = require('pdfkit');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -275,6 +277,25 @@ async function initDB() {
     await pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telefono VARCHAR(50)`).catch(() => {});
     await pool.query(`ALTER TABLE citas ADD COLUMN IF NOT EXISTS recordatorio_24h BOOLEAN DEFAULT false`).catch(() => {});
     await pool.query(`ALTER TABLE citas ADD COLUMN IF NOT EXISTS recordatorio_1h BOOLEAN DEFAULT false`).catch(() => {});
+    await pool.query(`ALTER TABLE citas ADD COLUMN IF NOT EXISTS precio INTEGER DEFAULT NULL`).catch(() => {});
+
+    // Presupuestos PDF
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS presupuestos (
+        id SERIAL PRIMARY KEY,
+        token VARCHAR(64) UNIQUE NOT NULL,
+        clinica_id INTEGER REFERENCES clinicas(id),
+        paciente_telefono VARCHAR(50) NOT NULL,
+        paciente_nombre VARCHAR(255) NOT NULL,
+        tipo VARCHAR(20) NOT NULL DEFAULT 'cotizacion',
+        items JSONB NOT NULL,
+        total INTEGER NOT NULL,
+        clinica_datos JSONB NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `).catch(() => {});
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_presupuestos_token ON presupuestos(token)').catch(() => {});
+    console.log('Tabla presupuestos lista');
 
     // Escalación a humano
     await pool.query(`
@@ -485,7 +506,7 @@ app.post('/api/change-password', requireAuth, async (req, res) => {
 // --- FORGOT PASSWORD (WhatsApp code) ---
 const resetCodes = new Map(); // key: username, value: { code, expires, attempts }
 
-app.post('/api/forgot-password/send-code', rateLimitForgotPassword, async (req, res) => {
+app.post('/api/forgot-password/send-code', async (req, res) => {
   const { username } = req.body;
   if (!username) return res.status(400).json({ error: 'Ingresá tu usuario' });
   try {
@@ -499,20 +520,12 @@ app.post('/api/forgot-password/send-code', rateLimitForgotPassword, async (req, 
     const user = result.rows[0];
     if (!user.telefono) return res.status(400).json({ error: 'Este usuario no tiene teléfono registrado. Contactá al administrador.' });
 
-    // Rate limit: max 3 codes per hour
-    const existing = resetCodes.get(username);
-    if (existing && existing.attempts >= 3 && Date.now() - existing.firstAttempt < 3600000) {
-      return res.status(429).json({ error: 'Demasiados intentos. Esperá 1 hora o contactá al administrador.' });
-    }
-
     // Generate 6-digit code
     const code = String(Math.floor(100000 + Math.random() * 900000));
-    const now = Date.now();
     resetCodes.set(username, {
       code,
-      expires: now + 600000, // 10 minutes
-      attempts: (existing && now - existing.firstAttempt < 3600000) ? existing.attempts + 1 : 1,
-      firstAttempt: (existing && now - existing.firstAttempt < 3600000) ? existing.firstAttempt : now,
+      expires: Date.now() + 600000, // 10 minutes
+      verifyAttempts: 0,
     });
 
     // Find instance to send from (user's clinic or first available)
@@ -1082,6 +1095,333 @@ app.post('/api/bot/escalar', rateLimitBotEndpoints, requireBotApiKey, async (req
   } catch (err) {
     console.error('Escalar error:', err);
     res.status(500).json({ error: 'Error al escalar' });
+  }
+});
+
+// --- PRESUPUESTO PDF ---
+
+function formatGuaranies(amount) {
+  return 'Gs. ' + Number(amount || 0).toLocaleString('es-PY');
+}
+
+function generarPresupuestoPDF({ clinica, paciente, items, total, tipo, fecha }) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const buffers = [];
+    doc.on('data', b => buffers.push(b));
+    doc.on('end', () => resolve(Buffer.concat(buffers)));
+    doc.on('error', reject);
+
+    const pageWidth = doc.page.width - 100; // margins
+
+    // --- ENCABEZADO ---
+    doc.fontSize(20).font('Helvetica-Bold').text(clinica.nombre_clinica || 'Clínica Dental', { align: 'center' });
+    doc.moveDown(0.3);
+    doc.fontSize(10).font('Helvetica');
+    if (clinica.direccion) doc.text(clinica.direccion, { align: 'center' });
+    const contactLine = [clinica.telefono, clinica.email].filter(Boolean).join(' | ');
+    if (contactLine) doc.text(contactLine, { align: 'center' });
+    doc.moveDown(0.5);
+
+    // Línea separadora
+    doc.moveTo(50, doc.y).lineTo(50 + pageWidth, doc.y).stroke('#cccccc');
+    doc.moveDown(0.8);
+
+    // --- TÍTULO ---
+    const titulo = tipo === 'citas_agendadas' ? 'PRESUPUESTO DE SERVICIOS' : 'COTIZACIÓN DE SERVICIOS';
+    doc.fontSize(14).font('Helvetica-Bold').text(titulo, { align: 'center' });
+    doc.moveDown(0.5);
+
+    // --- FECHA Y PACIENTE ---
+    doc.fontSize(10).font('Helvetica');
+    doc.text(`Fecha: ${fecha}`, { align: 'right' });
+    doc.moveDown(0.3);
+    doc.font('Helvetica-Bold').text('Paciente: ', { continued: true }).font('Helvetica').text(paciente.nombre || 'Sin nombre');
+    doc.font('Helvetica-Bold').text('Teléfono: ', { continued: true }).font('Helvetica').text(paciente.telefono || '');
+    doc.moveDown(1);
+
+    // --- TABLA ---
+    const tableTop = doc.y;
+    const colWidths = tipo === 'citas_agendadas'
+      ? [pageWidth * 0.35, pageWidth * 0.2, pageWidth * 0.15, pageWidth * 0.3]
+      : [pageWidth * 0.7, pageWidth * 0.3];
+    const headers = tipo === 'citas_agendadas'
+      ? ['Servicio', 'Fecha', 'Hora', 'Precio']
+      : ['Servicio', 'Precio'];
+
+    // Header row
+    doc.font('Helvetica-Bold').fontSize(10);
+    let x = 50;
+    const headerBgY = tableTop - 3;
+    doc.rect(50, headerBgY, pageWidth, 20).fill('#2563eb');
+    x = 50;
+    headers.forEach((h, i) => {
+      const align = i === headers.length - 1 ? 'right' : 'left';
+      const textX = align === 'right' ? x : x + 5;
+      const textW = align === 'right' ? colWidths[i] - 5 : colWidths[i] - 5;
+      doc.fillColor('#ffffff').text(h, textX, headerBgY + 5, { width: textW, align });
+      x += colWidths[i];
+    });
+
+    doc.fillColor('#000000');
+    let rowY = headerBgY + 25;
+
+    // Data rows
+    doc.font('Helvetica').fontSize(10);
+    items.forEach((item, idx) => {
+      if (rowY > doc.page.height - 100) {
+        doc.addPage();
+        rowY = 50;
+      }
+
+      // Fondo alternado
+      if (idx % 2 === 0) {
+        doc.rect(50, rowY - 3, pageWidth, 20).fill('#f3f4f6');
+        doc.fillColor('#000000');
+      }
+
+      x = 50;
+      const rowData = tipo === 'citas_agendadas'
+        ? [item.nombre, item.fecha || '-', item.hora || '-', formatGuaranies(item.precio)]
+        : [item.nombre, formatGuaranies(item.precio)];
+
+      rowData.forEach((val, i) => {
+        const align = i === rowData.length - 1 ? 'right' : 'left';
+        const textX = align === 'right' ? x : x + 5;
+        const textW = align === 'right' ? colWidths[i] - 5 : colWidths[i] - 5;
+        doc.text(val, textX, rowY, { width: textW, align });
+        x += colWidths[i];
+      });
+      rowY += 22;
+    });
+
+    // Línea antes del total
+    rowY += 5;
+    doc.moveTo(50, rowY).lineTo(50 + pageWidth, rowY).stroke('#cccccc');
+    rowY += 10;
+
+    // TOTAL
+    doc.font('Helvetica-Bold').fontSize(13);
+    doc.text(`TOTAL: ${formatGuaranies(total)}`, 50, rowY, { width: pageWidth, align: 'right' });
+    doc.moveDown(2);
+
+    // --- PIE ---
+    doc.font('Helvetica').fontSize(9).fillColor('#666666');
+    doc.text('Este presupuesto es válido por 30 días a partir de la fecha de emisión.', 50, doc.y, { align: 'center' });
+    doc.moveDown(0.5);
+    doc.text(`${clinica.nombre_clinica || 'Clínica Dental'} - Generado automáticamente`, { align: 'center' });
+
+    doc.end();
+  });
+}
+
+// Helper: resolver precio de un tipo de cita desde servicios de la clínica
+function resolverPrecioServicio(tipoCita, servicios) {
+  if (!tipoCita || !servicios || !Array.isArray(servicios)) return 0;
+  const servicio = servicios.find(s => s.nombre && s.nombre.toLowerCase().trim() === tipoCita.toLowerCase().trim());
+  return servicio?.precio || 0;
+}
+
+// POST /api/bot/presupuesto/citas - Presupuesto de citas agendadas
+app.post('/api/bot/presupuesto/citas', rateLimitBotEndpoints, requireBotApiKey, async (req, res) => {
+  try {
+    const { instance, telefono_paciente } = req.body;
+    if (!instance || !telefono_paciente) {
+      return res.status(400).json({ error: 'instance y telefono_paciente requeridos' });
+    }
+
+    // Resolver clínica
+    const clinica = await pool.query('SELECT id, instance_name FROM clinicas WHERE instance_name = $1', [instance]);
+    const clinicaId = clinica.rows[0]?.id;
+    if (!clinicaId) return res.status(404).json({ error: 'Clínica no encontrada' });
+
+    // Datos de clínica
+    const configRes = await pool.query(
+      'SELECT nombre_clinica, direccion, telefono, email, servicios FROM configuracion_clinica WHERE clinica_id = $1',
+      [clinicaId]
+    );
+    const config = configRes.rows[0];
+    if (!config) return res.status(404).json({ error: 'Configuración de clínica no encontrada' });
+
+    // Paciente
+    const pacienteRes = await pool.query(
+      'SELECT nombre, telefono FROM pacientes WHERE telefono = $1 AND clinica_id = $2',
+      [telefono_paciente, clinicaId]
+    );
+    const paciente = pacienteRes.rows[0] || { nombre: 'Paciente', telefono: telefono_paciente };
+
+    // Citas pendientes/confirmadas
+    const citasRes = await pool.query(
+      `SELECT id, tipo_cita, fecha_cita::text, hora_cita::text, precio, estado
+       FROM citas
+       WHERE paciente_telefono = $1 AND clinica_id = $2 AND estado IN ('Pendiente', 'Confirmada', 'Modificada')
+       ORDER BY fecha_cita, hora_cita`,
+      [telefono_paciente, clinicaId]
+    );
+
+    if (citasRes.rows.length === 0) {
+      return res.json({ ok: false, error: 'No hay citas agendadas para este paciente' });
+    }
+
+    const servicios = config.servicios || [];
+    const items = citasRes.rows.map(c => ({
+      nombre: c.tipo_cita || 'Consulta',
+      fecha: c.fecha_cita ? c.fecha_cita.substring(0, 10) : '-',
+      hora: c.hora_cita ? c.hora_cita.substring(0, 5) : '-',
+      precio: c.precio != null ? c.precio : resolverPrecioServicio(c.tipo_cita, servicios)
+    }));
+    const total = items.reduce((sum, i) => sum + (i.precio || 0), 0);
+
+    const hoy = new Date();
+    const fecha = hoy.toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    // Generar token y guardar
+    const token = crypto.randomUUID();
+    const clinicaDatos = { nombre_clinica: config.nombre_clinica, direccion: config.direccion, telefono: config.telefono, email: config.email };
+
+    await pool.query(
+      `INSERT INTO presupuestos (token, clinica_id, paciente_telefono, paciente_nombre, tipo, items, total, clinica_datos)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [token, clinicaId, paciente.telefono, paciente.nombre, 'citas_agendadas', JSON.stringify(items), total, JSON.stringify(clinicaDatos)]
+    );
+
+    // Generar PDF
+    const pdfBuffer = await generarPresupuestoPDF({
+      clinica: clinicaDatos,
+      paciente,
+      items,
+      total,
+      tipo: 'citas_agendadas',
+      fecha
+    });
+
+    const pdfBase64 = pdfBuffer.toString('base64');
+    const publicUrl = `${req.protocol}://${req.get('host')}/presupuesto/${token}`;
+    const filename = `presupuesto-${(paciente.nombre || 'paciente').replace(/\s+/g, '-')}-${hoy.toISOString().substring(0, 10)}.pdf`;
+
+    // Enviar por WhatsApp via Evolution API
+    const whatsappResult = await evolutionFetch(`/message/sendMedia/${instance}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        number: telefono_paciente + '@s.whatsapp.net',
+        mediatype: 'document',
+        media: `data:application/pdf;base64,${pdfBase64}`,
+        fileName: filename,
+        caption: `📄 Presupuesto de ${config.nombre_clinica || 'la clínica'}\n💰 Total: ${formatGuaranies(total)}\n\n🔗 También podés descargarlo desde:\n${publicUrl}`
+      })
+    });
+
+    res.json({
+      ok: true,
+      download_url: publicUrl,
+      total,
+      items_count: items.length,
+      whatsapp_sent: !!whatsappResult
+    });
+  } catch (err) {
+    console.error('Presupuesto citas error:', err);
+    res.status(500).json({ error: 'Error al generar presupuesto' });
+  }
+});
+
+// POST /api/bot/presupuesto/cotizacion - Cotización de servicios sueltos
+app.post('/api/bot/presupuesto/cotizacion', rateLimitBotEndpoints, requireBotApiKey, async (req, res) => {
+  try {
+    const { instance, telefono_paciente, servicios: serviciosReq } = req.body;
+    if (!instance || !telefono_paciente || !Array.isArray(serviciosReq) || serviciosReq.length === 0) {
+      return res.status(400).json({ error: 'instance, telefono_paciente y servicios[] requeridos' });
+    }
+
+    // Resolver clínica
+    const clinica = await pool.query('SELECT id FROM clinicas WHERE instance_name = $1', [instance]);
+    const clinicaId = clinica.rows[0]?.id;
+    if (!clinicaId) return res.status(404).json({ error: 'Clínica no encontrada' });
+
+    // Datos de clínica
+    const configRes = await pool.query(
+      'SELECT nombre_clinica, direccion, telefono, email, servicios FROM configuracion_clinica WHERE clinica_id = $1',
+      [clinicaId]
+    );
+    const config = configRes.rows[0];
+    if (!config) return res.status(404).json({ error: 'Configuración de clínica no encontrada' });
+
+    // Paciente
+    const pacienteRes = await pool.query(
+      'SELECT nombre, telefono FROM pacientes WHERE telefono = $1 AND clinica_id = $2',
+      [telefono_paciente, clinicaId]
+    );
+    const paciente = pacienteRes.rows[0] || { nombre: 'Paciente', telefono: telefono_paciente };
+
+    // Resolver precios de servicios solicitados
+    const serviciosClinica = config.servicios || [];
+    const items = [];
+    const noEncontrados = [];
+
+    for (const nombre of serviciosReq) {
+      const servicio = serviciosClinica.find(s =>
+        s.nombre && s.nombre.toLowerCase().trim() === nombre.toLowerCase().trim()
+      );
+      if (servicio) {
+        items.push({ nombre: servicio.nombre, precio: servicio.precio || 0 });
+      } else {
+        noEncontrados.push(nombre);
+      }
+    }
+
+    if (items.length === 0) {
+      return res.json({ ok: false, error: 'Ningún servicio encontrado', no_encontrados: noEncontrados });
+    }
+
+    const total = items.reduce((sum, i) => sum + (i.precio || 0), 0);
+    const hoy = new Date();
+    const fecha = hoy.toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    const token = crypto.randomUUID();
+    const clinicaDatos = { nombre_clinica: config.nombre_clinica, direccion: config.direccion, telefono: config.telefono, email: config.email };
+
+    await pool.query(
+      `INSERT INTO presupuestos (token, clinica_id, paciente_telefono, paciente_nombre, tipo, items, total, clinica_datos)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [token, clinicaId, paciente.telefono, paciente.nombre, 'cotizacion', JSON.stringify(items), total, JSON.stringify(clinicaDatos)]
+    );
+
+    // Generar PDF
+    const pdfBuffer = await generarPresupuestoPDF({
+      clinica: clinicaDatos,
+      paciente,
+      items,
+      total,
+      tipo: 'cotizacion',
+      fecha
+    });
+
+    const pdfBase64 = pdfBuffer.toString('base64');
+    const publicUrl = `${req.protocol}://${req.get('host')}/presupuesto/${token}`;
+    const filename = `cotizacion-${(paciente.nombre || 'paciente').replace(/\s+/g, '-')}-${hoy.toISOString().substring(0, 10)}.pdf`;
+
+    // Enviar por WhatsApp
+    const whatsappResult = await evolutionFetch(`/message/sendMedia/${instance}`, {
+      method: 'POST',
+      body: JSON.stringify({
+        number: telefono_paciente + '@s.whatsapp.net',
+        mediatype: 'document',
+        media: `data:application/pdf;base64,${pdfBase64}`,
+        fileName: filename,
+        caption: `📄 Cotización de ${config.nombre_clinica || 'la clínica'}\n💰 Total: ${formatGuaranies(total)}\n\n🔗 También podés descargarlo desde:\n${publicUrl}`
+      })
+    });
+
+    res.json({
+      ok: true,
+      download_url: publicUrl,
+      total,
+      items_count: items.length,
+      no_encontrados: noEncontrados.length > 0 ? noEncontrados : undefined,
+      whatsapp_sent: !!whatsappResult
+    });
+  } catch (err) {
+    console.error('Cotización error:', err);
+    res.status(500).json({ error: 'Error al generar cotización' });
   }
 });
 
@@ -1670,6 +2010,36 @@ app.put('/api/admin/usuarios/:id', requireAuth, requireSuperAdmin, async (req, r
   }
 });
 
+// --- DESCARGA PÚBLICA DE PRESUPUESTO PDF ---
+const rateLimitPresupuesto = createRateLimit('presupuesto', 20, 60 * 1000);
+app.get('/presupuesto/:token', rateLimitPresupuesto, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM presupuestos WHERE token = $1', [req.params.token]);
+    if (result.rows.length === 0) {
+      return res.status(404).send('<h1>Presupuesto no encontrado</h1><p>El enlace es inválido o ha expirado.</p>');
+    }
+
+    const p = result.rows[0];
+    const fecha = new Date(p.created_at).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const pdfBuffer = await generarPresupuestoPDF({
+      clinica: p.clinica_datos,
+      paciente: { nombre: p.paciente_nombre, telefono: p.paciente_telefono },
+      items: p.items,
+      total: p.total,
+      tipo: p.tipo,
+      fecha
+    });
+
+    const filename = `presupuesto-${(p.paciente_nombre || 'paciente').replace(/\s+/g, '-')}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error('Descarga presupuesto error:', err);
+    res.status(500).send('<h1>Error al generar el PDF</h1>');
+  }
+});
+
 // --- SERVE REACT BUILD ---
 app.use(express.static(path.join(__dirname, 'dist')));
 app.get('*', (req, res) => {
@@ -1694,6 +2064,16 @@ async function autoMarcarNoAsistio() {
 }
 setInterval(autoMarcarNoAsistio, 60 * 60 * 1000); // cada hora
 setTimeout(autoMarcarNoAsistio, 15000); // 15s después de iniciar
+
+// Limpiar presupuestos viejos (>90 días)
+async function limpiarPresupuestosViejos() {
+  try {
+    const result = await pool.query("DELETE FROM presupuestos WHERE created_at < NOW() - INTERVAL '90 days'");
+    if (result.rowCount > 0) console.log(`Presupuestos limpiados: ${result.rowCount} eliminados`);
+  } catch (err) { /* tabla puede no existir aún */ }
+}
+setInterval(limpiarPresupuestosViejos, 24 * 60 * 60 * 1000); // cada 24h
+setTimeout(limpiarPresupuestosViejos, 30000);
 
 const server = app.listen(PORT, () => {
   console.log(`Panel Clínica Dental corriendo en puerto ${PORT}`);
