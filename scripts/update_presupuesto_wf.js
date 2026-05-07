@@ -31,63 +31,74 @@ async function main() {
     {
       id: 'tool-presupuesto-citas',
       name: 'Presupuesto Citas PDF',
-      type: 'n8n-nodes-base.httpRequestTool',
+      type: '@n8n/n8n-nodes-langchain.toolHttpRequest',
       typeVersion: 1.1,
       position: [464, 3900],
       parameters: {
         method: 'POST',
-        url: `=${PANEL_URL}/api/bot/presupuesto/citas`,
-        sendHeaders: true,
-        headerParameters: {
-          parameters: [
-            { name: 'x-bot-api-key', value: '={{ $env.BOT_API_KEY || "" }}' }
+        url: `${PANEL_URL}/api/bot/presupuesto/citas`,
+        authentication: 'none',
+        sendBody: true,
+        specifyBody: 'keypair',
+        parametersBody: {
+          values: [
+            { name: 'instance', valueProvider: 'fieldValue', value: `={{ $('Preparar Datos').item.json.instanceName }}` },
+            { name: 'telefono_paciente', valueProvider: 'modelRequired' }
           ]
         },
-        sendBody: true,
-        specifyBody: 'json',
-        jsonBody: `={
-  "instance": "{{ $('Preparar Datos').item.json.instanceName }}",
-  "telefono_paciente": "{{ $fromAI('telefono', 'Telefono del paciente sin @s.whatsapp.net') }}"
-}`,
-        options: {},
-        description: 'Genera un PDF de presupuesto con todas las citas pendientes/confirmadas del paciente y lo envía por WhatsApp automáticamente. Usar cuando el paciente pide un presupuesto de sus citas agendadas. Devuelve download_url y total.',
-        descriptionType: 'auto',
-        toolDescription: 'Genera un PDF de presupuesto con todas las citas agendadas (pendientes/confirmadas) del paciente y lo envía automáticamente por WhatsApp. Usar cuando el paciente dice: "quiero un presupuesto", "cuanto me salen mis citas", "mandame el presupuesto de mis turnos". Devuelve download_url (link de descarga) y total en guaraníes.',
+        toolDescription: 'Genera un PDF de presupuesto con todas las citas agendadas (pendientes/confirmadas) del paciente y lo envia automaticamente por WhatsApp. Usar cuando el paciente dice: "quiero un presupuesto", "cuanto me salen mis citas", "mandame el presupuesto de mis turnos". El parametro telefono_paciente es el telefono del paciente sin @s.whatsapp.net. Devuelve download_url (link de descarga) y total en guaranies.',
+        optimizeResponse: false,
+        placeholderDefinitions: {
+          values: [
+            { name: 'telefono_paciente', description: 'Telefono del paciente sin @s.whatsapp.net, ej: 595981123456', type: 'string' }
+          ]
+        }
       }
     },
     {
       id: 'tool-cotizacion-pdf',
-      name: 'Cotización Servicios PDF',
-      type: 'n8n-nodes-base.httpRequestTool',
+      name: 'Cotizacion Servicios PDF',
+      type: '@n8n/n8n-nodes-langchain.toolHttpRequest',
       typeVersion: 1.1,
       position: [464, 4100],
       parameters: {
         method: 'POST',
-        url: `=${PANEL_URL}/api/bot/presupuesto/cotizacion`,
-        sendHeaders: true,
-        headerParameters: {
-          parameters: [
-            { name: 'x-bot-api-key', value: '={{ $env.BOT_API_KEY || "" }}' }
+        url: `${PANEL_URL}/api/bot/presupuesto/cotizacion`,
+        authentication: 'none',
+        sendBody: true,
+        specifyBody: 'keypair',
+        parametersBody: {
+          values: [
+            { name: 'instance', valueProvider: 'fieldValue', value: `={{ $('Preparar Datos').item.json.instanceName }}` },
+            { name: 'telefono_paciente', valueProvider: 'modelRequired' },
+            { name: 'servicios', valueProvider: 'modelRequired' }
           ]
         },
-        sendBody: true,
-        specifyBody: 'json',
-        jsonBody: `={
-  "instance": "{{ $('Preparar Datos').item.json.instanceName }}",
-  "telefono_paciente": "{{ $fromAI('telefono', 'Telefono del paciente sin @s.whatsapp.net') }}",
-  "servicios": {{ $fromAI('servicios', 'Array JSON de nombres de servicios solicitados, ej: ["Limpieza dental", "Ortodoncia"]') }}
-}`,
-        options: {},
-        description: 'Genera un PDF de cotización con servicios específicos y lo envía por WhatsApp.',
-        descriptionType: 'auto',
-        toolDescription: 'Genera un PDF de cotización con servicios específicos (sin necesidad de tener citas agendadas) y lo envía automáticamente por WhatsApp. Usar cuando el paciente pregunta precios de varios servicios y quiere un documento. Ej: "pasame precios de limpieza y ortodoncia en PDF", "quiero una cotización". Pasar los nombres de servicios como array. Devuelve download_url y total en guaraníes.',
+        toolDescription: 'Genera un PDF de cotizacion con servicios especificos (sin necesidad de tener citas agendadas) y lo envia automaticamente por WhatsApp. Usar cuando el paciente pregunta precios de varios servicios y quiere un documento. Ej: "pasame precios de limpieza y ortodoncia en PDF", "quiero una cotizacion". El parametro servicios es un array JSON de nombres, ej: ["Limpieza dental", "Ortodoncia"]. Devuelve download_url y total en guaranies.',
+        optimizeResponse: false,
+        placeholderDefinitions: {
+          values: [
+            { name: 'telefono_paciente', description: 'Telefono del paciente sin @s.whatsapp.net, ej: 595981123456', type: 'string' },
+            { name: 'servicios', description: 'Array JSON de nombres de servicios solicitados, ej: ["Limpieza dental", "Ortodoncia"]', type: 'json' }
+          ]
+        }
       }
     }
   ];
 
+  // Eliminar nodos viejos con tipo incorrecto
+  const oldNames = ['Presupuesto Citas PDF', 'Cotización Servicios PDF', 'Cotizacion Servicios PDF'];
+  workflow.nodes = workflow.nodes.filter(n => {
+    if (oldNames.includes(n.name) && n.type !== '@n8n/n8n-nodes-langchain.toolHttpRequest') {
+      console.log(`  Eliminando nodo viejo "${n.name}" (tipo: ${n.type})`);
+      delete workflow.connections[n.name];
+      return false;
+    }
+    return true;
+  });
+
   // Agregar nodos al workflow
   for (const node of newNodes) {
-    // Verificar si ya existe
     const existing = workflow.nodes.findIndex(n => n.name === node.name);
     if (existing >= 0) {
       console.log(`  Nodo "${node.name}" ya existe, actualizando...`);
