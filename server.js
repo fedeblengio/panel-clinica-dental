@@ -1303,9 +1303,9 @@ app.post('/api/bot/presupuesto/citas', rateLimitBotEndpoints, requireBotApiKey, 
     const whatsappResult = await evolutionFetch(`/message/sendMedia/${instance}`, {
       method: 'POST',
       body: JSON.stringify({
-        number: telefono_paciente + '@s.whatsapp.net',
+        number: telefono_paciente,
         mediatype: 'document',
-        media: `data:application/pdf;base64,${pdfBase64}`,
+        media: publicUrl,
         fileName: filename,
         caption: `📄 Presupuesto de ${config.nombre_clinica || 'la clínica'}\n💰 Total: ${formatGuaranies(total)}\n\n🔗 También podés descargarlo desde:\n${publicUrl}`
       })
@@ -1403,9 +1403,9 @@ app.post('/api/bot/presupuesto/cotizacion', rateLimitBotEndpoints, requireBotApi
     const whatsappResult = await evolutionFetch(`/message/sendMedia/${instance}`, {
       method: 'POST',
       body: JSON.stringify({
-        number: telefono_paciente + '@s.whatsapp.net',
+        number: telefono_paciente,
         mediatype: 'document',
-        media: `data:application/pdf;base64,${pdfBase64}`,
+        media: publicUrl,
         fileName: filename,
         caption: `📄 Cotización de ${config.nombre_clinica || 'la clínica'}\n💰 Total: ${formatGuaranies(total)}\n\n🔗 También podés descargarlo desde:\n${publicUrl}`
       })
@@ -1455,9 +1455,9 @@ app.post('/api/bot/presupuesto/enviar-pdf', rateLimitBotEndpoints, async (req, r
       await evolutionFetch(`/message/sendMedia/${instanceName}`, {
         method: 'POST',
         body: JSON.stringify({
-          number: phone + '@s.whatsapp.net',
+          number: phone,
           mediatype: 'document',
-          media: `data:application/pdf;base64,${pdfBase64}`,
+          media: publicUrl,
           fileName: filename,
           caption: `📄 Presupuesto de ${p.clinica_datos?.nombre_clinica || 'la clínica'}\n💰 Total: ${formatGuaranies(p.total)}\n\n🔗 Descargalo desde:\n${publicUrl}`
         })
