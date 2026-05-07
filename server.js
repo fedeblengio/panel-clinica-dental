@@ -1425,6 +1425,52 @@ app.post('/api/bot/presupuesto/cotizacion', rateLimitBotEndpoints, requireBotApi
   }
 });
 
+// POST /api/bot/presupuesto/enviar-pdf - Generar PDF desde token y enviar por WhatsApp
+app.post('/api/bot/presupuesto/enviar-pdf', rateLimitBotEndpoints, async (req, res) => {
+  try {
+    const { token, instance, telefono_paciente } = req.body;
+    if (!token) return res.status(400).json({ error: 'token requerido' });
+
+    const result = await pool.query('SELECT * FROM presupuestos WHERE token = $1', [token]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Presupuesto no encontrado' });
+
+    const p = result.rows[0];
+    const fecha = new Date(p.created_at).toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const pdfBuffer = await generarPresupuestoPDF({
+      clinica: p.clinica_datos,
+      paciente: { nombre: p.paciente_nombre, telefono: p.paciente_telefono },
+      items: p.items,
+      total: p.total,
+      tipo: p.tipo,
+      fecha
+    });
+
+    const pdfBase64 = pdfBuffer.toString('base64');
+    const publicUrl = `${req.protocol}://${req.get('host')}/presupuesto/${token}`;
+    const filename = `presupuesto-${(p.paciente_nombre || 'paciente').replace(/\s+/g, '-')}.pdf`;
+    const instanceName = instance || (await pool.query('SELECT instance_name FROM clinicas WHERE id = $1', [p.clinica_id])).rows[0]?.instance_name;
+    const phone = telefono_paciente || p.paciente_telefono;
+
+    if (instanceName && phone) {
+      await evolutionFetch(`/message/sendMedia/${instanceName}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          number: phone + '@s.whatsapp.net',
+          mediatype: 'document',
+          media: `data:application/pdf;base64,${pdfBase64}`,
+          fileName: filename,
+          caption: `📄 Presupuesto de ${p.clinica_datos?.nombre_clinica || 'la clínica'}\n💰 Total: ${formatGuaranies(p.total)}\n\n🔗 Descargalo desde:\n${publicUrl}`
+        })
+      });
+    }
+
+    res.json({ ok: true, download_url: publicUrl, whatsapp_sent: true });
+  } catch (err) {
+    console.error('Enviar PDF error:', err);
+    res.status(500).json({ error: 'Error al enviar PDF' });
+  }
+});
+
 // Panel: ver conversaciones escaladas
 app.get('/api/conversaciones/escaladas', requireAuth, requireClinica, async (req, res) => {
   try {
