@@ -1307,7 +1307,7 @@ app.post('/api/bot/presupuesto/citas', rateLimitBotEndpoints, requireBotApiKey, 
         mediatype: 'document',
         media: publicUrl,
         fileName: filename,
-        caption: `📄 Presupuesto de ${config.nombre_clinica || 'la clínica'}\n💰 Total: ${formatGuaranies(total)}\n\n🔗 También podés descargarlo desde:\n${publicUrl}`
+        caption: `📄 Presupuesto de ${config.nombre_clinica || 'la clínica'}\n💰 Total: ${formatGuaranies(total)}`
       })
     });
 
@@ -1407,7 +1407,7 @@ app.post('/api/bot/presupuesto/cotizacion', rateLimitBotEndpoints, requireBotApi
         mediatype: 'document',
         media: publicUrl,
         fileName: filename,
-        caption: `📄 Cotización de ${config.nombre_clinica || 'la clínica'}\n💰 Total: ${formatGuaranies(total)}\n\n🔗 También podés descargarlo desde:\n${publicUrl}`
+        caption: `📄 Cotización de ${config.nombre_clinica || 'la clínica'}\n💰 Total: ${formatGuaranies(total)}`
       })
     });
 
@@ -1459,7 +1459,7 @@ app.post('/api/bot/presupuesto/enviar-pdf', rateLimitBotEndpoints, async (req, r
           mediatype: 'document',
           media: publicUrl,
           fileName: filename,
-          caption: `📄 Presupuesto de ${p.clinica_datos?.nombre_clinica || 'la clínica'}\n💰 Total: ${formatGuaranies(p.total)}\n\n🔗 Descargalo desde:\n${publicUrl}`
+          caption: `📄 Presupuesto de ${p.clinica_datos?.nombre_clinica || 'la clínica'}\n💰 Total: ${formatGuaranies(p.total)}`
         })
       });
     }
