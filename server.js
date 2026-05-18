@@ -399,6 +399,8 @@ async function initDB() {
     await pool.query('CREATE INDEX IF NOT EXISTS idx_escalaciones_session ON escalaciones(session_id, activa)').catch(() => {});
     await pool.query(`ALTER TABLE configuracion_clinica ADD COLUMN IF NOT EXISTS telefono_notificaciones VARCHAR(50) DEFAULT ''`).catch(() => {});
     await pool.query(`ALTER TABLE clinicas ADD COLUMN IF NOT EXISTS whatsapp_api TEXT DEFAULT 'evolution'`).catch(() => {});
+    // Migración: bot-clinica usa Meta Cloud API
+    await pool.query(`UPDATE clinicas SET whatsapp_api = 'meta' WHERE instance_name = 'bot-clinica' AND whatsapp_api = 'evolution'`).catch(() => {});
     console.log('Tabla escalaciones lista');
 
     // DB trigger: auto-assign clinica_id to new chat messages based on patient's clinica
