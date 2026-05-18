@@ -48,6 +48,61 @@ async function evolutionFetch(evoPath, options = {}) {
   }
 }
 
+// --- META CLOUD API CONFIG ---
+const META_PHONE_NUMBER_ID = process.env.META_PHONE_NUMBER_ID || '1138134919381712';
+const META_ACCESS_TOKEN = process.env.META_ACCESS_TOKEN || '';
+const META_VERIFY_TOKEN = process.env.META_VERIFY_TOKEN || 'mitoken123';
+const META_API_VERSION = 'v21.0';
+
+async function metaSendText(phoneNumber, text) {
+  const url = `https://graph.facebook.com/${META_API_VERSION}/${META_PHONE_NUMBER_ID}/messages`;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${META_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: phoneNumber,
+        type: 'text',
+        text: { body: text },
+      }),
+    });
+    return await res.json();
+  } catch (err) {
+    console.error('Meta Cloud API error:', err.message);
+    return null;
+  }
+}
+
+async function metaSendMedia(phoneNumber, mediaType, mediaUrl, caption, filename) {
+  const url = `https://graph.facebook.com/${META_API_VERSION}/${META_PHONE_NUMBER_ID}/messages`;
+  const mediaObj = { link: mediaUrl };
+  if (caption) mediaObj.caption = caption;
+  if (filename) mediaObj.filename = filename;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${META_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: phoneNumber,
+        type: mediaType,
+        [mediaType]: mediaObj,
+      }),
+    });
+    return await res.json();
+  } catch (err) {
+    console.error('Meta Cloud API media error:', err.message);
+    return null;
+  }
+}
+
 // BOT API KEY para autenticar endpoints que usa n8n
 const BOT_API_KEY = process.env.BOT_API_KEY || '';
 
@@ -58,6 +113,38 @@ if (!process.env.DATABASE_URL) {
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
+
+// --- WHATSAPP SEND HELPERS (routes to Meta or Evolution based on clinic config) ---
+async function sendWhatsAppText(instanceName, phoneNumber, text) {
+  // Check if this instance uses Meta Cloud API
+  try {
+    const result = await pool.query('SELECT whatsapp_api FROM clinicas WHERE instance_name = $1', [instanceName]);
+    if (result.rows[0]?.whatsapp_api === 'meta') {
+      return await metaSendText(phoneNumber, text);
+    }
+  } catch (e) {
+    // Fall through to Evolution
+  }
+  return await evolutionFetch(`/message/sendText/${instanceName}`, {
+    method: 'POST',
+    body: JSON.stringify({ number: phoneNumber, text }),
+  });
+}
+
+async function sendWhatsAppMedia(instanceName, phoneNumber, mediaType, mediaUrl, caption, filename) {
+  try {
+    const result = await pool.query('SELECT whatsapp_api FROM clinicas WHERE instance_name = $1', [instanceName]);
+    if (result.rows[0]?.whatsapp_api === 'meta') {
+      return await metaSendMedia(phoneNumber, mediaType, mediaUrl, caption, filename);
+    }
+  } catch (e) {
+    // Fall through to Evolution
+  }
+  return await evolutionFetch(`/message/sendMedia/${instanceName}`, {
+    method: 'POST',
+    body: JSON.stringify({ number: phoneNumber, mediatype: mediaType === 'document' ? 'document' : mediaType, media: mediaUrl, fileName: filename, caption }),
+  });
+}
 
 app.use(express.json({ limit: '100kb' }));
 
@@ -311,6 +398,7 @@ async function initDB() {
     `).catch(() => {});
     await pool.query('CREATE INDEX IF NOT EXISTS idx_escalaciones_session ON escalaciones(session_id, activa)').catch(() => {});
     await pool.query(`ALTER TABLE configuracion_clinica ADD COLUMN IF NOT EXISTS telefono_notificaciones VARCHAR(50) DEFAULT ''`).catch(() => {});
+    await pool.query(`ALTER TABLE clinicas ADD COLUMN IF NOT EXISTS whatsapp_api TEXT DEFAULT 'evolution'`).catch(() => {});
     console.log('Tabla escalaciones lista');
 
     // DB trigger: auto-assign clinica_id to new chat messages based on patient's clinica
@@ -534,19 +622,13 @@ app.post('/api/forgot-password/send-code', async (req, res) => {
       const fallback = await pool.query('SELECT instance_name FROM clinicas WHERE activa = true LIMIT 1');
       instanceName = fallback.rows[0]?.instance_name;
     }
-    if (!instanceName || !EVOLUTION_API_KEY) {
+    if (!instanceName) {
       return res.status(500).json({ error: 'No se puede enviar el mensaje. Contactá al administrador.' });
     }
 
-    // Send WhatsApp message via Evolution API
+    // Send WhatsApp message via Evolution API or Meta Cloud API
     const phone = user.telefono.replace(/[^0-9]/g, '');
-    await evolutionFetch(`/message/sendText/${instanceName}`, {
-      method: 'POST',
-      body: JSON.stringify({
-        number: phone,
-        text: `🔐 Tu código de verificación es: *${code}*\n\nVálido por 10 minutos.\n\nSi no solicitaste esto, ignorá este mensaje.`,
-      }),
-    });
+    await sendWhatsAppText(instanceName, phone, `🔐 Tu código de verificación es: *${code}*\n\nVálido por 10 minutos.\n\nSi no solicitaste esto, ignorá este mensaje.`);
 
     // Mask phone for response
     const masked = phone.slice(0, 4) + '****' + phone.slice(-2);
@@ -944,6 +1026,40 @@ app.delete('/api/citas/:id', requireAuth, requireClinica, async (req, res) => {
   }
 });
 
+// --- META WEBHOOK VERIFICATION ---
+app.get('/api/meta-webhook', (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+
+  if (mode === 'subscribe' && token === META_VERIFY_TOKEN) {
+    console.log('Meta webhook verified');
+    return res.status(200).send(challenge);
+  }
+  res.status(403).send('Forbidden');
+});
+
+// --- META WEBHOOK POST (receive messages and forward to n8n) ---
+app.post('/api/meta-webhook', async (req, res) => {
+  // Meta requires 200 response quickly
+  res.status(200).send('EVENT_RECEIVED');
+
+  try {
+    const body = req.body;
+    if (!body?.entry?.[0]?.changes?.[0]?.value?.messages) return;
+
+    // Forward to n8n webhook
+    const n8nWebhookUrl = process.env.N8N_META_WEBHOOK_URL || 'https://humberto-proyect-n8n.jxugns.easypanel.host/webhook/clinica-dental-whatsapp-meta';
+    await fetch(n8nWebhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    console.error('Meta webhook forward error:', err.message);
+  }
+});
+
 // --- CONFIGURACION PUBLICA (para n8n bot) ---
 app.get('/api/configuracion/bot', rateLimitBotConfig, async (req, res) => {
   try {
@@ -1299,17 +1415,8 @@ app.post('/api/bot/presupuesto/citas', rateLimitBotEndpoints, requireBotApiKey, 
     const publicUrl = `${req.protocol}://${req.get('host')}/presupuesto/${token}`;
     const filename = `presupuesto-${(paciente.nombre || 'paciente').replace(/\s+/g, '-')}-${hoy.toISOString().substring(0, 10)}.pdf`;
 
-    // Enviar por WhatsApp via Evolution API
-    const whatsappResult = await evolutionFetch(`/message/sendMedia/${instance}`, {
-      method: 'POST',
-      body: JSON.stringify({
-        number: telefono_paciente,
-        mediatype: 'document',
-        media: publicUrl,
-        fileName: filename,
-        caption: `📄 Presupuesto de ${config.nombre_clinica || 'la clínica'}\n💰 Total: ${formatGuaranies(total)}`
-      })
-    });
+    // Enviar por WhatsApp via Evolution API o Meta Cloud API
+    const whatsappResult = await sendWhatsAppMedia(instance, telefono_paciente, 'document', publicUrl, `📄 Presupuesto de ${config.nombre_clinica || 'la clínica'}\n💰 Total: ${formatGuaranies(total)}`, filename);
 
     res.json({
       ok: true,
@@ -1399,17 +1506,8 @@ app.post('/api/bot/presupuesto/cotizacion', rateLimitBotEndpoints, requireBotApi
     const publicUrl = `${req.protocol}://${req.get('host')}/presupuesto/${token}`;
     const filename = `cotizacion-${(paciente.nombre || 'paciente').replace(/\s+/g, '-')}-${hoy.toISOString().substring(0, 10)}.pdf`;
 
-    // Enviar por WhatsApp
-    const whatsappResult = await evolutionFetch(`/message/sendMedia/${instance}`, {
-      method: 'POST',
-      body: JSON.stringify({
-        number: telefono_paciente,
-        mediatype: 'document',
-        media: publicUrl,
-        fileName: filename,
-        caption: `📄 Cotización de ${config.nombre_clinica || 'la clínica'}\n💰 Total: ${formatGuaranies(total)}`
-      })
-    });
+    // Enviar por WhatsApp via Evolution API o Meta Cloud API
+    const whatsappResult = await sendWhatsAppMedia(instance, telefono_paciente, 'document', publicUrl, `📄 Cotización de ${config.nombre_clinica || 'la clínica'}\n💰 Total: ${formatGuaranies(total)}`, filename);
 
     res.json({
       ok: true,
@@ -1452,16 +1550,7 @@ app.post('/api/bot/presupuesto/enviar-pdf', rateLimitBotEndpoints, async (req, r
     const phone = telefono_paciente || p.paciente_telefono;
 
     if (instanceName && phone) {
-      await evolutionFetch(`/message/sendMedia/${instanceName}`, {
-        method: 'POST',
-        body: JSON.stringify({
-          number: phone,
-          mediatype: 'document',
-          media: publicUrl,
-          fileName: filename,
-          caption: `📄 Presupuesto de ${p.clinica_datos?.nombre_clinica || 'la clínica'}\n💰 Total: ${formatGuaranies(p.total)}`
-        })
-      });
+      await sendWhatsAppMedia(instanceName, phone, 'document', publicUrl, `📄 Presupuesto de ${p.clinica_datos?.nombre_clinica || 'la clínica'}\n💰 Total: ${formatGuaranies(p.total)}`, filename);
     }
 
     res.json({ ok: true, download_url: publicUrl, whatsapp_sent: true });
