@@ -1041,24 +1041,79 @@ app.get('/api/meta-webhook', (req, res) => {
   res.status(403).send('Forbidden');
 });
 
-// --- META WEBHOOK POST (receive messages and forward to n8n) ---
+// --- META WEBHOOK POST (receive messages, transform to Evolution format, forward to n8n) ---
 app.post('/api/meta-webhook', async (req, res) => {
   // Meta requires 200 response quickly
   res.status(200).send('EVENT_RECEIVED');
 
   try {
     const body = req.body;
-    if (!body?.entry?.[0]?.changes?.[0]?.value?.messages) return;
+    const changes = body?.entry?.[0]?.changes?.[0]?.value;
+    if (!changes?.messages?.[0]) return;
 
-    // Forward to n8n webhook
-    const n8nWebhookUrl = process.env.N8N_META_WEBHOOK_URL || 'https://humberto-proyect-n8n.jxugns.easypanel.host/webhook/clinica-dental-whatsapp-meta';
+    const msg = changes.messages[0];
+    const contact = changes.contacts?.[0];
+    const phoneNumber = msg.from;
+    const instanceName = 'bot-clinica';
+
+    // Transform Meta message to Evolution API format
+    let messageType, messageContent;
+    if (msg.type === 'text') {
+      messageType = 'conversation';
+      messageContent = { conversation: msg.text.body };
+    } else if (msg.type === 'audio') {
+      messageType = 'audioMessage';
+      messageContent = { audioMessage: { url: '', mimetype: 'audio/ogg', id: msg.audio?.id } };
+    } else if (msg.type === 'image') {
+      messageType = 'imageMessage';
+      messageContent = { imageMessage: { url: '', caption: msg.image?.caption || '' } };
+    } else {
+      // Unsupported type, still forward as extendedTextMessage
+      messageType = 'extendedTextMessage';
+      messageContent = { extendedTextMessage: { text: `[${msg.type} no soportado]` } };
+    }
+
+    const evolutionPayload = {
+      event: 'messages.upsert',
+      instance: instanceName,
+      data: {
+        key: {
+          remoteJid: `${phoneNumber}@s.whatsapp.net`,
+          fromMe: false,
+          id: msg.id,
+        },
+        pushName: contact?.profile?.name || 'Usuario',
+        message: messageContent,
+        messageType: messageType,
+        messageTimestamp: parseInt(msg.timestamp) || Math.floor(Date.now() / 1000),
+      },
+    };
+
+    // Forward to the SAME n8n webhook that Evolution uses
+    const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL || 'https://humberto-proyect-n8n.jxugns.easypanel.host/webhook/clinica-dental-whatsapp-v4';
     await fetch(n8nWebhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(evolutionPayload),
     });
   } catch (err) {
     console.error('Meta webhook forward error:', err.message);
+  }
+});
+
+// --- SEND WHATSAPP MESSAGE (endpoint for n8n to send via correct API) ---
+app.post('/api/bot/send-message', rateLimitBotEndpoints, async (req, res) => {
+  try {
+    const { instance, number, text } = req.body;
+    if (!instance || !number || !text) {
+      return res.status(400).json({ error: 'instance, number y text requeridos' });
+    }
+    const phone = number.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
+    const result = await sendWhatsAppText(instance, phone, text);
+    res.json({ ok: true, result });
+  } catch (err) {
+    console.error('Send message error:', err.message);
+    res.status(500).json({ error: 'Error al enviar mensaje' });
   }
 });
 
